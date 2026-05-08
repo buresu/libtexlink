@@ -69,7 +69,7 @@ int main(void) {
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
   GLFWwindow *win =
-      glfwCreateWindow(WIDTH, HEIGHT, "egl_tex_consumer", NULL, NULL);
+      glfwCreateWindow(WIDTH, HEIGHT, "egl tex consumer", NULL, NULL);
   glfwMakeContextCurrent(win);
   glfwSwapInterval(1);
   glewInit();
