@@ -8,6 +8,14 @@ extern "C" {
 #endif
 
 typedef enum {
+  DMABL_BACKEND_UNKNOWN = 0,
+  DMABL_BACKEND_CPU,
+  DMABL_BACKEND_EGL,
+  DMABL_BACKEND_VULKAN,
+  DMABL_BACKEND_CUDA,
+} dmabl_backend_t;
+
+typedef enum {
   DMABL_TYPE_TEXTURE_2D,
   DMABL_TYPE_TEXTURE_3D,
   DMABL_TYPE_TEXTURE_CUBE,
@@ -23,6 +31,7 @@ typedef enum {
 } dmabl_buffering_t;
 
 typedef struct {
+  uint32_t backend;
   uint32_t type;
   uint32_t width;
   uint32_t height;
@@ -39,7 +48,7 @@ typedef struct dmabl_session dmabl_session_t;
 
 /* Buffer alloc/free */
 dmabl_buf_t *dmabl_alloc(uint32_t w, uint32_t h, uint32_t format,
-                         dmabl_type_t type);
+                         dmabl_type_t type, dmabl_backend_t backend);
 void dmabl_free(dmabl_buf_t *buf);
 
 /* Session management */

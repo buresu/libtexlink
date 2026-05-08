@@ -17,8 +17,10 @@ static const char *vert_src = "#version 330 core\n"
                               "in vec2 position;\n"
                               "in vec2 texcoord;\n"
                               "out vec2 uv;\n"
+                              "uniform int flip_y;\n"
                               "void main() {\n"
                               "  uv = texcoord;\n"
+                              "  if (flip_y != 0) uv.y = 1.0 - uv.y;\n"
                               "  gl_Position = vec4(position, 0.0, 1.0);\n"
                               "}\n";
 
@@ -66,7 +68,8 @@ int main(void) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-  GLFWwindow *win = glfwCreateWindow(WIDTH, HEIGHT, "egl_tex_consumer", NULL, NULL);
+  GLFWwindow *win =
+      glfwCreateWindow(WIDTH, HEIGHT, "egl_tex_consumer", NULL, NULL);
   glfwMakeContextCurrent(win);
   glfwSwapInterval(1);
   glewInit();
@@ -126,6 +129,7 @@ int main(void) {
   glDeleteShader(frag);
 
   GLint tex_loc = glGetUniformLocation(prog, "tex");
+  GLint flip_y_loc = glGetUniformLocation(prog, "flip_y");
 
   GLuint vao, vbo;
   glGenVertexArrays(1, &vao);
@@ -159,6 +163,7 @@ int main(void) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textures[idx]);
     glUniform1i(tex_loc, 0);
+    glUniform1i(flip_y_loc, meta.backend != DMABL_BACKEND_EGL ? 1 : 0);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);

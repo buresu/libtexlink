@@ -29,8 +29,8 @@ int main(int argc, char **argv) {
 
   /* Double-buffering: two raw buffers */
   dmabl_buf_t *bufs[2] = {
-      dmabl_alloc(BUF_SIZE, 1, 0, DMABL_TYPE_RAW),
-      dmabl_alloc(BUF_SIZE, 1, 0, DMABL_TYPE_RAW),
+      dmabl_alloc(BUF_SIZE, 1, 0, DMABL_TYPE_RAW, DMABL_BACKEND_CPU),
+      dmabl_alloc(BUF_SIZE, 1, 0, DMABL_TYPE_RAW, DMABL_BACKEND_CPU),
   };
 
   if (!bufs[0] || !bufs[1]) {

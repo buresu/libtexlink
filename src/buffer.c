@@ -161,19 +161,28 @@ static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
 }
 
 dmabl_buf_t *dmabl_alloc(uint32_t w, uint32_t h, uint32_t format,
-                         dmabl_type_t type) {
+                         dmabl_type_t type, dmabl_backend_t backend) {
+  dmabl_buf_t *buf;
   switch (type) {
   case DMABL_TYPE_RAW:
   case DMABL_TYPE_VERTEX_BUFFER:
   case DMABL_TYPE_COMPUTE_BUFFER:
-    return alloc_linear(w, h, format, type);
+    buf = alloc_linear(w, h, format, type);
+    break;
 
   case DMABL_TYPE_TEXTURE_2D:
   case DMABL_TYPE_TEXTURE_3D:
   case DMABL_TYPE_TEXTURE_CUBE:
-    return alloc_gbm(w, h, format, type);
+    buf = alloc_gbm(w, h, format, type);
+    break;
+
+  default:
+    return NULL;
   }
-  return NULL;
+
+  if (buf)
+    buf->meta.backend = (uint32_t)backend;
+  return buf;
 }
 
 void dmabl_free(dmabl_buf_t *buf) {

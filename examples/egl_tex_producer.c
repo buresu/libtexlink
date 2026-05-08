@@ -97,8 +97,10 @@ int main(void) {
   }
 
   dmabl_buf_t *bufs[2] = {
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D),
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D),
+      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
+                  DMABL_BACKEND_EGL),
+      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
+                  DMABL_BACKEND_EGL),
   };
   if (!bufs[0] || !bufs[1]) {
     fprintf(stderr, "dmabl_alloc failed\n");

@@ -11,36 +11,36 @@
 #include <string.h>
 #include <unistd.h>
 
-#define WIDTH      640
-#define HEIGHT     480
+#define WIDTH 640
+#define HEIGHT 480
 #define MAX_IMAGES 2
 #define MAX_SC_IMGS 8
 
 typedef struct {
-  VkInstance                       instance;
-  VkPhysicalDevice                 phys;
-  VkDevice                         device;
-  VkQueue                          graphics_queue;
-  uint32_t                         graphics_queue_family;
-  VkCommandPool                    cmd_pool;
-  VkCommandBuffer                  cmd;
-  VkFence                          fence;
+  VkInstance instance;
+  VkPhysicalDevice phys;
+  VkDevice device;
+  VkQueue graphics_queue;
+  uint32_t graphics_queue_family;
+  VkCommandPool cmd_pool;
+  VkCommandBuffer cmd;
+  VkFence fence;
   VkPhysicalDeviceMemoryProperties mem_props;
-  VkSurfaceKHR                     surface;
-  VkSwapchainKHR                   swapchain;
-  VkImage                          sc_images[MAX_SC_IMGS];
-  uint32_t                         sc_image_count;
-  VkFormat                         sc_format;
-  VkExtent2D                       sc_extent;
-  VkSemaphore                      image_available;
-  VkSemaphore                      render_finished;
+  VkSurfaceKHR surface;
+  VkSwapchainKHR swapchain;
+  VkImage sc_images[MAX_SC_IMGS];
+  uint32_t sc_image_count;
+  VkFormat sc_format;
+  VkExtent2D sc_extent;
+  VkSemaphore image_available;
+  VkSemaphore render_finished;
 } VulkanContext;
 
 typedef struct {
-  VkImage        image;
+  VkImage image;
   VkDeviceMemory memory;
-  int            dma_fd;
-  VkImageLayout  current_layout;
+  int dma_fd;
+  VkImageLayout current_layout;
 } ImportedImage;
 
 static void vk_check(VkResult r, const char *msg) {
@@ -62,16 +62,16 @@ static uint32_t find_memory_type(VulkanContext *ctx, uint32_t type_bits,
 
 static void create_instance(VulkanContext *ctx) {
   VkApplicationInfo app = {
-      .sType            = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "dma consumer",
-      .apiVersion       = VK_API_VERSION_1_2,
+      .apiVersion = VK_API_VERSION_1_2,
   };
-  uint32_t    ext_count = 0;
-  const char **exts     = glfwGetRequiredInstanceExtensions(&ext_count);
+  uint32_t ext_count = 0;
+  const char **exts = glfwGetRequiredInstanceExtensions(&ext_count);
   VkInstanceCreateInfo ci = {
-      .sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      .pApplicationInfo        = &app,
-      .enabledExtensionCount   = ext_count,
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pApplicationInfo = &app,
+      .enabledExtensionCount = ext_count,
       .ppEnabledExtensionNames = exts,
   };
   vk_check(vkCreateInstance(&ci, NULL, &ctx->instance), "vkCreateInstance");
@@ -80,9 +80,13 @@ static void create_instance(VulkanContext *ctx) {
 static void create_device(VulkanContext *ctx) {
   uint32_t dev_count = 0;
   vkEnumeratePhysicalDevices(ctx->instance, &dev_count, NULL);
-  if (dev_count == 0) { fprintf(stderr, "No Vulkan devices found\n"); exit(1); }
+  if (dev_count == 0) {
+    fprintf(stderr, "No Vulkan devices found\n");
+    exit(1);
+  }
   VkPhysicalDevice devs[16];
-  if (dev_count > 16) dev_count = 16;
+  if (dev_count > 16)
+    dev_count = 16;
   vkEnumeratePhysicalDevices(ctx->instance, &dev_count, devs);
   ctx->phys = devs[0];
   vkGetPhysicalDeviceMemoryProperties(ctx->phys, &ctx->mem_props);
@@ -90,7 +94,8 @@ static void create_device(VulkanContext *ctx) {
   uint32_t qcount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(ctx->phys, &qcount, NULL);
   VkQueueFamilyProperties qprops[32];
-  if (qcount > 32) qcount = 32;
+  if (qcount > 32)
+    qcount = 32;
   vkGetPhysicalDeviceQueueFamilyProperties(ctx->phys, &qcount, qprops);
   for (uint32_t i = 0; i < qcount; i++) {
     VkBool32 present = VK_FALSE;
@@ -103,9 +108,9 @@ static void create_device(VulkanContext *ctx) {
 
   float priority = 1.0f;
   VkDeviceQueueCreateInfo qci = {
-      .sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = ctx->graphics_queue_family,
-      .queueCount       = 1,
+      .queueCount = 1,
       .pQueuePriorities = &priority,
   };
 
@@ -117,36 +122,40 @@ static void create_device(VulkanContext *ctx) {
   };
 
   VkDeviceCreateInfo dci = {
-      .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .queueCreateInfoCount    = 1,
-      .pQueueCreateInfos       = &qci,
-      .enabledExtensionCount   = sizeof(dev_exts) / sizeof(dev_exts[0]),
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = 1,
+      .pQueueCreateInfos = &qci,
+      .enabledExtensionCount = sizeof(dev_exts) / sizeof(dev_exts[0]),
       .ppEnabledExtensionNames = dev_exts,
   };
-  vk_check(vkCreateDevice(ctx->phys, &dci, NULL, &ctx->device), "vkCreateDevice");
-  vkGetDeviceQueue(ctx->device, ctx->graphics_queue_family, 0, &ctx->graphics_queue);
+  vk_check(vkCreateDevice(ctx->phys, &dci, NULL, &ctx->device),
+           "vkCreateDevice");
+  vkGetDeviceQueue(ctx->device, ctx->graphics_queue_family, 0,
+                   &ctx->graphics_queue);
 
   VkCommandPoolCreateInfo pool_ci = {
-      .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .queueFamilyIndex = ctx->graphics_queue_family,
-      .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
   };
   vk_check(vkCreateCommandPool(ctx->device, &pool_ci, NULL, &ctx->cmd_pool),
            "vkCreateCommandPool");
 
   VkCommandBufferAllocateInfo cmd_ai = {
-      .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool        = ctx->cmd_pool,
-      .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = ctx->cmd_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1,
   };
   vk_check(vkAllocateCommandBuffers(ctx->device, &cmd_ai, &ctx->cmd),
            "vkAllocateCommandBuffers");
 
   VkFenceCreateInfo fci = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-  vk_check(vkCreateFence(ctx->device, &fci, NULL, &ctx->fence), "vkCreateFence");
+  vk_check(vkCreateFence(ctx->device, &fci, NULL, &ctx->fence),
+           "vkCreateFence");
 
-  VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+  VkSemaphoreCreateInfo sci = {.sType =
+                                   VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
   vk_check(vkCreateSemaphore(ctx->device, &sci, NULL, &ctx->image_available),
            "image_available semaphore");
   vk_check(vkCreateSemaphore(ctx->device, &sci, NULL, &ctx->render_finished),
@@ -158,13 +167,15 @@ static void create_swapchain(VulkanContext *ctx) {
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(ctx->phys, ctx->surface, &caps);
 
   uint32_t fmt_count = 0;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->phys, ctx->surface, &fmt_count, NULL);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->phys, ctx->surface, &fmt_count,
+                                       NULL);
   if (fmt_count == 0) {
     fprintf(stderr, "No surface formats available\n");
     exit(1);
   }
   VkSurfaceFormatKHR *formats = malloc(fmt_count * sizeof(*formats));
-  vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->phys, ctx->surface, &fmt_count, formats);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(ctx->phys, ctx->surface, &fmt_count,
+                                       formats);
 
   VkSurfaceFormatKHR chosen = formats[0];
   for (uint32_t i = 0; i < fmt_count; i++) {
@@ -177,8 +188,8 @@ static void create_swapchain(VulkanContext *ctx) {
 
   ctx->sc_format = chosen.format;
   ctx->sc_extent = (caps.currentExtent.width != UINT32_MAX)
-      ? caps.currentExtent
-      : (VkExtent2D){WIDTH, HEIGHT};
+                       ? caps.currentExtent
+                       : (VkExtent2D){WIDTH, HEIGHT};
   free(formats);
 
   uint32_t image_count = caps.minImageCount + 1;
@@ -191,27 +202,28 @@ static void create_swapchain(VulkanContext *ctx) {
   }
 
   VkSwapchainCreateInfoKHR swapchain_ci = {
-      .sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-      .surface          = ctx->surface,
-      .minImageCount    = image_count,
-      .imageFormat      = chosen.format,
-      .imageColorSpace  = chosen.colorSpace,
-      .imageExtent      = ctx->sc_extent,
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = ctx->surface,
+      .minImageCount = image_count,
+      .imageFormat = chosen.format,
+      .imageColorSpace = chosen.colorSpace,
+      .imageExtent = ctx->sc_extent,
       .imageArrayLayers = 1,
       /* TRANSFER_DST_BIT: blit destination from shared image */
-      .imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+      .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .preTransform     = caps.currentTransform,
-      .compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      .presentMode      = VK_PRESENT_MODE_FIFO_KHR,
-      .clipped          = VK_TRUE,
+      .preTransform = caps.currentTransform,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+      .clipped = VK_TRUE,
   };
-  vk_check(vkCreateSwapchainKHR(ctx->device, &swapchain_ci, NULL, &ctx->swapchain),
-           "vkCreateSwapchainKHR");
+  vk_check(
+      vkCreateSwapchainKHR(ctx->device, &swapchain_ci, NULL, &ctx->swapchain),
+      "vkCreateSwapchainKHR");
 
   ctx->sc_image_count = MAX_SC_IMGS;
-  vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain,
-                          &ctx->sc_image_count, ctx->sc_images);
+  vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->sc_image_count,
+                          ctx->sc_images);
 }
 
 /*
@@ -220,28 +232,29 @@ static void create_swapchain(VulkanContext *ctx) {
  */
 static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
                                  int dma_fd, const dmabl_meta_t *meta) {
-  img->dma_fd         = dma_fd;
+  img->dma_fd = dma_fd;
   img->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
   VkExternalMemoryImageCreateInfo ext_img = {
-      .sType       = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
       .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
   };
   VkImageCreateInfo ici = {
-      .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .pNext         = &ext_img,
-      .imageType     = VK_IMAGE_TYPE_2D,
-      .format        = VK_FORMAT_B8G8R8A8_UNORM,
-      .extent        = {meta->width, meta->height, 1},
-      .mipLevels     = 1,
-      .arrayLayers   = 1,
-      .samples       = VK_SAMPLE_COUNT_1_BIT,
-      .tiling        = VK_IMAGE_TILING_LINEAR,
-      .usage         = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode   = VK_SHARING_MODE_EXCLUSIVE,
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = &ext_img,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_B8G8R8A8_UNORM,
+      .extent = {meta->width, meta->height, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_LINEAR,
+      .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  vk_check(vkCreateImage(ctx->device, &ici, NULL, &img->image), "vkCreateImage");
+  vk_check(vkCreateImage(ctx->device, &ici, NULL, &img->image),
+           "vkCreateImage");
 
   VkMemoryRequirements mem_req;
   vkGetImageMemoryRequirements(ctx->device, img->image, &mem_req);
@@ -251,22 +264,23 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
       .image = img->image,
   };
   VkImportMemoryFdInfoKHR import_info = {
-      .sType      = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-      .pNext      = &dedicated,
+      .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
+      .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd         = dup(dma_fd),
+      .fd = dup(dma_fd),
   };
   VkMemoryAllocateInfo mai = {
-      .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext           = &import_info,
-      .allocationSize  = mem_req.size,
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &import_info,
+      .allocationSize = mem_req.size,
       .memoryTypeIndex = find_memory_type(ctx, mem_req.memoryTypeBits, 0),
   };
   if (mai.memoryTypeIndex == UINT32_MAX) {
     fprintf(stderr, "No suitable memory type for DMA-BUF import\n");
     exit(1);
   }
-  vk_check(vkAllocateMemory(ctx->device, &mai, NULL, &img->memory), "vkAllocateMemory");
+  vk_check(vkAllocateMemory(ctx->device, &mai, NULL, &img->memory),
+           "vkAllocateMemory");
   vk_check(vkBindImageMemory(ctx->device, img->image, img->memory, 0),
            "vkBindImageMemory");
 }
@@ -281,111 +295,112 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
  * On the very first frame current_layout is UNDEFINED (discard is fine because
  * dmabl_consumer_acquire has already confirmed the producer wrote new data).
  */
-static void display_frame(VulkanContext *ctx, ImportedImage *img) {
+static void display_frame(VulkanContext *ctx, ImportedImage *img,
+                          const dmabl_meta_t *meta) {
   uint32_t sc_idx = 0;
-  VkResult res = vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
-                                       ctx->image_available, VK_NULL_HANDLE,
-                                       &sc_idx);
+  VkResult res =
+      vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
+                            ctx->image_available, VK_NULL_HANDLE, &sc_idx);
   if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR)
     return;
   vk_check(res, "vkAcquireNextImageKHR");
 
-  VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+  VkCommandBufferBeginInfo bi = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   vkBeginCommandBuffer(ctx->cmd, &bi);
 
   VkImageSubresourceRange full = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
   /* Transition shared image → TRANSFER_SRC_OPTIMAL */
   VkImageMemoryBarrier shared_to_src = {
-      .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout           = img->current_layout,
-      .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .oldLayout = img->current_layout,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image               = img->image,
-      .subresourceRange    = full,
-      .srcAccessMask       = 0,
-      .dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT,
+      .image = img->image,
+      .subresourceRange = full,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
   };
 
   /* Transition swapchain image UNDEFINED → TRANSFER_DST_OPTIMAL */
   VkImageMemoryBarrier sc_to_dst = {
-      .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image               = ctx->sc_images[sc_idx],
-      .subresourceRange    = full,
-      .srcAccessMask       = 0,
-      .dstAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .image = ctx->sc_images[sc_idx],
+      .subresourceRange = full,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
   };
 
   VkImageMemoryBarrier pre_barriers[] = {shared_to_src, sc_to_dst};
-  vkCmdPipelineBarrier(ctx->cmd,
-      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      0, 0, NULL, 0, NULL,
-      2, pre_barriers);
+  vkCmdPipelineBarrier(ctx->cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 2,
+                       pre_barriers);
 
   int32_t sw = (int32_t)ctx->sc_extent.width;
   int32_t sh = (int32_t)ctx->sc_extent.height;
+  /* EGL/OpenGL stores rows bottom-up; flip Y so the image appears correct. */
+  int flip_y = (meta->backend == DMABL_BACKEND_EGL);
   VkImageBlit region = {
       .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-      .srcOffsets     = {{0, 0, 0}, {WIDTH, HEIGHT, 1}},
+      .srcOffsets = {{0, flip_y ? (int32_t)meta->height : 0, 0},
+                     {(int32_t)meta->width, flip_y ? 0 : (int32_t)meta->height,
+                      1}},
       .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-      .dstOffsets     = {{0, 0, 0}, {sw, sh, 1}},
+      .dstOffsets = {{0, 0, 0}, {sw, sh, 1}},
   };
-  vkCmdBlitImage(ctx->cmd,
-      img->image,               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      ctx->sc_images[sc_idx],   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      1, &region, VK_FILTER_NEAREST);
+  vkCmdBlitImage(ctx->cmd, img->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 ctx->sc_images[sc_idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 1, &region, VK_FILTER_NEAREST);
 
   /* Transition swapchain image → PRESENT_SRC_KHR */
   VkImageMemoryBarrier sc_to_present = {
-      .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      .newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image               = ctx->sc_images[sc_idx],
-      .subresourceRange    = full,
-      .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .dstAccessMask       = 0,
+      .image = ctx->sc_images[sc_idx],
+      .subresourceRange = full,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = 0,
   };
 
   /* Transition shared image → GENERAL for next producer write */
   VkImageMemoryBarrier shared_to_general = {
-      .sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      .newLayout           = VK_IMAGE_LAYOUT_GENERAL,
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_GENERAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image               = img->image,
-      .subresourceRange    = full,
-      .srcAccessMask       = VK_ACCESS_TRANSFER_READ_BIT,
-      .dstAccessMask       = 0,
+      .image = img->image,
+      .subresourceRange = full,
+      .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+      .dstAccessMask = 0,
   };
 
   VkImageMemoryBarrier post_barriers[] = {sc_to_present, shared_to_general};
-  vkCmdPipelineBarrier(ctx->cmd,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-      0, 0, NULL, 0, NULL,
-      2, post_barriers);
+  vkCmdPipelineBarrier(ctx->cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0,
+                       NULL, 2, post_barriers);
 
   vkEndCommandBuffer(ctx->cmd);
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
   VkSubmitInfo submit = {
-      .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .waitSemaphoreCount   = 1,
-      .pWaitSemaphores      = &ctx->image_available,
-      .pWaitDstStageMask    = &wait_stage,
-      .commandBufferCount   = 1,
-      .pCommandBuffers      = &ctx->cmd,
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &ctx->image_available,
+      .pWaitDstStageMask = &wait_stage,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &ctx->cmd,
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores    = &ctx->render_finished,
+      .pSignalSemaphores = &ctx->render_finished,
   };
   vkQueueSubmit(ctx->graphics_queue, 1, &submit, ctx->fence);
   vkWaitForFences(ctx->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
@@ -395,12 +410,12 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img) {
   img->current_layout = VK_IMAGE_LAYOUT_GENERAL;
 
   VkPresentInfoKHR present = {
-      .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores    = &ctx->render_finished,
-      .swapchainCount     = 1,
-      .pSwapchains        = &ctx->swapchain,
-      .pImageIndices      = &sc_idx,
+      .pWaitSemaphores = &ctx->render_finished,
+      .swapchainCount = 1,
+      .pSwapchains = &ctx->swapchain,
+      .pImageIndices = &sc_idx,
   };
   vkQueuePresentKHR(ctx->graphics_queue, &present);
 }
@@ -421,7 +436,8 @@ int main(void) {
   VulkanContext vk = {0};
   create_instance(&vk);
 
-  /* Surface must be created before device (needed for queue family selection) */
+  /* Surface must be created before device (needed for queue family selection)
+   */
   vk_check(glfwCreateWindowSurface(vk.instance, window, NULL, &vk.surface),
            "glfwCreateWindowSurface");
 
@@ -455,7 +471,7 @@ int main(void) {
       break;
     }
 
-    display_frame(&vk, &images[idx]);
+    display_frame(&vk, &images[idx], &meta);
 
     dmabl_consumer_release(session, idx);
     glfwPollEvents();
