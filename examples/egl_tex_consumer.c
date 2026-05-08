@@ -10,6 +10,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define WIDTH 640
+#define HEIGHT 480
+
 static const char *vert_src = "#version 330 core\n"
                               "in vec2 position;\n"
                               "in vec2 texcoord;\n"
@@ -63,7 +66,7 @@ int main(void) {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-  GLFWwindow *win = glfwCreateWindow(1280, 720, "egl_tex_consumer", NULL, NULL);
+  GLFWwindow *win = glfwCreateWindow(WIDTH, HEIGHT, "egl_tex_consumer", NULL, NULL);
   glfwMakeContextCurrent(win);
   glfwSwapInterval(1);
   glewInit();

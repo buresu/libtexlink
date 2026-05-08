@@ -59,7 +59,6 @@ if(DMABL_BUILD_EXAMPLES)
     pkg_check_modules(GLFW3 glfw3)
     pkg_check_modules(EGL   egl)
     find_package(OpenGL COMPONENTS OpenGL)
-
     find_package(GLEW)
 
     if(GLFW3_FOUND AND EGL_FOUND AND OpenGL_OpenGL_FOUND AND GLEW_FOUND)
@@ -83,6 +82,33 @@ if(DMABL_BUILD_EXAMPLES)
                 -Wall -Wextra
                 ${GLFW3_CFLAGS_OTHER}
                 ${EGL_CFLAGS_OTHER}
+            )
+        endforeach()
+    endif()
+
+    find_package(Vulkan)
+
+    if(GLFW3_FOUND AND Vulkan_FOUND)
+        foreach(example vulkan_tex_producer vulkan_tex_consumer)
+            add_executable(${example} examples/${example}.c)
+            target_link_libraries(${example} PRIVATE
+                    dmabuflink
+                    ${GLFW3_LIBRARIES}
+                    Vulkan::Vulkan
+                    m
+            )
+            target_include_directories(${example} PRIVATE
+                    include
+                    ${GLFW3_INCLUDE_DIRS}
+                    ${Vulkan_INCLUDE_DIRS}
+                    ${DRM_INCLUDE_DIRS}
+            )
+            target_compile_definitions(${example} PRIVATE
+                    GLFW_INCLUDE_VULKAN
+            )
+            target_compile_options(${example} PRIVATE
+                    -Wall -Wextra -Wpedantic
+                    ${GLFW3_CFLAGS_OTHER}
             )
         endforeach()
     endif()

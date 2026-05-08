@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define WIDTH 640
+#define HEIGHT 480
+
 static void sleep_until_next_frame(double *last_time, double interval_sec) {
   double now = glfwGetTime();
   double wait = *last_time + interval_sec - now;
@@ -25,9 +28,6 @@ static void sleep_until_next_frame(double *last_time, double interval_sec) {
   }
   *last_time = glfwGetTime();
 }
-
-#define WIDTH 1280
-#define HEIGHT 720
 
 static const char *vert_src =
     "#version 330 core\n"
