@@ -14,8 +14,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 512
+#define HEIGHT 512
 #define MAX_SC_IMGS 8
 
 static void sleep_until_next_frame(double *last_time, double interval_sec) {

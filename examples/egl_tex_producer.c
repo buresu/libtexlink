@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 512
+#define HEIGHT 512
 
 static void sleep_until_next_frame(double *last_time, double interval_sec) {
   double now = glfwGetTime();
@@ -48,8 +48,9 @@ static const char *frag_src = "#version 330 core\n"
                               "void main() { FragColor = v_color; }\n";
 
 static float verts[] = {
-    0.0f, 0.5f, 0.0f, 1.0f, 0.0f,  0.0f, 1.0f, -0.5f, -0.5f, 0.0f, 0.0f,
-    1.0f, 0.0f, 1.0f, 0.5f, -0.5f, 0.0f, 0.0f, 0.0f,  1.0f,  1.0f,
+     0.0f,  0.577350f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+    -0.5f, -0.288675f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+     0.5f, -0.288675f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
 };
 
 typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;

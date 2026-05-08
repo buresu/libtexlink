@@ -11,8 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#define WIDTH 640
-#define HEIGHT 480
+#define WIDTH 512
+#define HEIGHT 512
 #define MAX_IMAGES 2
 #define MAX_SC_IMGS 8
 
