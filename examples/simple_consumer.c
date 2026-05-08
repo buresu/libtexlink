@@ -1,5 +1,5 @@
 /*
- * consumer example
+ * simple consumer example
  *
  * Usage: consumer [session_name]
  *        With no argument: list available sessions and exit.

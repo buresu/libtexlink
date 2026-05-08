@@ -49,7 +49,7 @@ target_compile_options(dmabuflink PRIVATE
 )
 
 if(DMABL_BUILD_EXAMPLES)
-    foreach(example producer consumer)
+    foreach(example simple_producer simple_consumer)
         add_executable(${example} examples/${example}.c)
         target_link_libraries(${example} PRIVATE dmabuflink)
         target_include_directories(${example} PRIVATE include)

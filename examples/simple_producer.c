@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 /*
- * producer example
+ * simple producer example
  *
  * Usage: producer [session_name]
  *        Default name: "example"
