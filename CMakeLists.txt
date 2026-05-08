@@ -55,6 +55,37 @@ if(DMABL_BUILD_EXAMPLES)
         target_include_directories(${example} PRIVATE include)
         target_compile_options(${example} PRIVATE -Wall -Wextra)
     endforeach()
+
+    pkg_check_modules(GLFW3 glfw3)
+    pkg_check_modules(EGL   egl)
+    find_package(OpenGL COMPONENTS OpenGL)
+
+    find_package(GLEW)
+
+    if(GLFW3_FOUND AND EGL_FOUND AND OpenGL_OpenGL_FOUND AND GLEW_FOUND)
+        foreach(example egl_tex_producer egl_tex_consumer)
+            add_executable(${example} examples/${example}.c)
+            target_link_libraries(${example} PRIVATE
+                dmabuflink
+                ${GLFW3_LIBRARIES}
+                ${EGL_LIBRARIES}
+                OpenGL::OpenGL
+                GLEW::GLEW
+                m
+            )
+            target_include_directories(${example} PRIVATE
+                include
+                ${GLFW3_INCLUDE_DIRS}
+                ${EGL_INCLUDE_DIRS}
+                ${DRM_INCLUDE_DIRS}
+            )
+            target_compile_options(${example} PRIVATE
+                -Wall -Wextra
+                ${GLFW3_CFLAGS_OTHER}
+                ${EGL_CFLAGS_OTHER}
+            )
+        endforeach()
+    endif()
 endif()
 
 include(GNUInstallDirs)
