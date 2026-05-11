@@ -98,14 +98,14 @@ int main(void) {
     return 1;
   }
 
-  texlink_buf_t *bufs[2] = {
-      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D),
-      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D),
+  texlink_frame_t *frames[2] = {
+      texlink_frame_create(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                           TEXLINK_TYPE_TEXTURE_2D),
+      texlink_frame_create(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                           TEXLINK_TYPE_TEXTURE_2D),
   };
-  if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "texlink_buf_alloc failed\n");
+  if (!frames[0] || !frames[1]) {
+    fprintf(stderr, "texlink_frame_create failed\n");
     return 1;
   }
 
@@ -114,8 +114,8 @@ int main(void) {
       .version = 1,
       .name = "texshare",
       .backend = TEXLINK_BACKEND_EGL,
-      .bufs = bufs,
-      .buffer_count = 2,
+      .frames = frames,
+      .frame_count = 2,
   };
   texlink_server_t *server = texlink_server_create(&desc);
   if (!server || texlink_server_start(server) < 0) {
@@ -125,14 +125,14 @@ int main(void) {
   printf("Rendering...\n");
 
   EGLDisplay dpy = eglGetCurrentDisplay();
-  texlink_meta_t meta = texlink_buf_meta(bufs[0]);
+  texlink_meta_t meta = texlink_frame_meta(frames[0]);
 
   EGLImage images[2];
   GLuint textures[2], fbos[2], rbos[2];
   for (int i = 0; i < 2; i++) {
-    images[i] = import_dma_buf(dpy, texlink_buf_get_dma_fd(bufs[i]), &meta);
+    images[i] = import_dma_buf(dpy, texlink_frame_get_dma_fd(frames[i]), &meta);
     if (images[i] == EGL_NO_IMAGE) {
-      fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
+      fprintf(stderr, "eglCreateImage failed for frame %d\n", i);
       return 1;
     }
 
@@ -195,9 +195,10 @@ int main(void) {
   while (!glfwWindowShouldClose(win)) {
     texlink_server_poll(server);
 
-    int idx = texlink_server_begin_frame(server);
-    if (idx < 0)
+    texlink_frame_t *frame = texlink_server_begin_frame(server);
+    if (!frame)
       break;
+    int idx = texlink_frame_index(frame);
 
     float angle = (float)glfwGetTime();
 
@@ -214,7 +215,7 @@ int main(void) {
     glUseProgram(0);
 
     glFlush();
-    texlink_server_end_frame(server, idx);
+    texlink_server_end_frame(server, frame);
 
     /* Blit shared FBO to window for preview */
     int win_w, win_h;
@@ -230,8 +231,8 @@ int main(void) {
   }
 
   texlink_server_destroy(server);
-  texlink_buf_free(bufs[0]);
-  texlink_buf_free(bufs[1]);
+  texlink_frame_destroy(frames[0]);
+  texlink_frame_destroy(frames[1]);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

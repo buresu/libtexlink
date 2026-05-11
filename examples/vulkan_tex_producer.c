@@ -51,7 +51,7 @@ typedef struct {
 } VulkanContext;
 
 typedef struct {
-  texlink_buf_t *buf;
+  texlink_frame_t *frame;
   VkImage image;
   VkDeviceMemory memory;
 } SharedImage;
@@ -240,13 +240,13 @@ static void create_swapchain(VulkanContext *ctx) {
 /*
  * Import a GBM-backed DMA-BUF fd into Vulkan as a LINEAR image.
  * We dup() the fd because Vulkan may consume (close) it on import.
- * The original buf->dma_fd remains valid for texlink to send to consumers.
+ * The original frame->dma_fd remains valid for texlink to send to consumers.
  * TRANSFER_DST: for clear  TRANSFER_SRC: for preview blit to swapchain.
  */
 static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
-                               texlink_buf_t *buf, uint32_t width,
+                               texlink_frame_t *frame, uint32_t width,
                                uint32_t height) {
-  img->buf = buf;
+  img->frame = frame;
 
   VkExternalMemoryImageCreateInfo ext_img = {
       .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
@@ -281,7 +281,7 @@ static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = dup(texlink_buf_get_dma_fd(buf)),
+      .fd = dup(texlink_frame_get_dma_fd(frame)),
   };
   VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -502,28 +502,28 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
-  texlink_buf_t *bufs[2] = {
-      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D),
-      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D),
+  texlink_frame_t *frames[2] = {
+      texlink_frame_create(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                           TEXLINK_TYPE_TEXTURE_2D),
+      texlink_frame_create(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                           TEXLINK_TYPE_TEXTURE_2D),
   };
-  if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "texlink_buf_alloc failed\n");
+  if (!frames[0] || !frames[1]) {
+    fprintf(stderr, "texlink_frame_create failed\n");
     return 1;
   }
 
   SharedImage images[2];
-  setup_shared_image(&vk, &images[0], bufs[0], WIDTH, HEIGHT);
-  setup_shared_image(&vk, &images[1], bufs[1], WIDTH, HEIGHT);
+  setup_shared_image(&vk, &images[0], frames[0], WIDTH, HEIGHT);
+  setup_shared_image(&vk, &images[1], frames[1], WIDTH, HEIGHT);
 
   printf("Serving 'texshare'...\n");
   texlink_server_desc_t desc = {
       .version = 1,
       .name = "texshare",
       .backend = TEXLINK_BACKEND_VULKAN,
-      .bufs = bufs,
-      .buffer_count = 2,
+      .frames = frames,
+      .frame_count = 2,
   };
   texlink_server_t *server = texlink_server_create(&desc);
   if (!server || texlink_server_start(server) < 0) {
@@ -537,14 +537,15 @@ int main(void) {
   while (!glfwWindowShouldClose(window)) {
     texlink_server_poll(server);
 
-    int idx = texlink_server_begin_frame(server);
-    if (idx < 0)
+    texlink_frame_t *frame = texlink_server_begin_frame(server);
+    if (!frame)
       break;
+    int idx = texlink_frame_index(frame);
 
     render_frame(&vk, &images[idx], (float)glfwGetTime());
     preview_frame(&vk, images[idx].image);
 
-    texlink_server_end_frame(server, idx);
+    texlink_server_end_frame(server, frame);
     glfwPollEvents();
     sleep_until_next_frame(&last_frame, 1.0 / 60.0);
   }
@@ -556,7 +557,7 @@ int main(void) {
   for (int i = 0; i < 2; i++) {
     vkDestroyImage(vk.device, images[i].image, NULL);
     vkFreeMemory(vk.device, images[i].memory, NULL);
-    texlink_buf_free(bufs[i]);
+    texlink_frame_destroy(frames[i]);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);

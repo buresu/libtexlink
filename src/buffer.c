@@ -13,8 +13,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                                texlink_type_t type);
+static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
+                                  texlink_type_t type);
 
 static int open_drm_render_node(void) {
   char path[32];
@@ -53,32 +53,33 @@ static int alloc_dma_heap(size_t size) {
   return -1;
 }
 
-static texlink_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
-                                   texlink_type_t type) {
+static texlink_frame_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
+                                     texlink_type_t type) {
   size_t sz = (size_t)w * (h ? h : 1);
 
   int dma_fd = alloc_dma_heap(sz);
 
   if (dma_fd >= 0) {
     /* Fast path: dma_heap available */
-    texlink_buf_t *buf = calloc(1, sizeof(*buf));
-    if (!buf) {
+    texlink_frame_t *frame = calloc(1, sizeof(*frame));
+    if (!frame) {
       close(dma_fd);
       return NULL;
     }
-    buf->dma_fd = dma_fd;
-    buf->sync_fd = -1;
-    buf->map_ptr = MAP_FAILED;
-    buf->drm_fd = -1;
-    buf->size = sz;
-    buf->meta.type = type;
-    buf->meta.width = w;
-    buf->meta.height = h;
-    buf->meta.depth = 1;
-    buf->meta.format = format;
-    buf->meta.stride = w;
-    buf->meta.size = (uint32_t)sz;
-    return buf;
+    frame->dma_fd = dma_fd;
+    frame->sync_fd = -1;
+    frame->index = -1;
+    frame->map_ptr = MAP_FAILED;
+    frame->drm_fd = -1;
+    frame->size = sz;
+    frame->meta.type = type;
+    frame->meta.width = w;
+    frame->meta.height = h;
+    frame->meta.depth = 1;
+    frame->meta.format = format;
+    frame->meta.stride = w;
+    frame->meta.size = (uint32_t)sz;
+    return frame;
   }
 
   /*
@@ -89,79 +90,81 @@ static texlink_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
   uint32_t gbm_w = (sz <= 4096) ? (uint32_t)sz : 4096u;
   uint32_t gbm_h = (uint32_t)((sz + gbm_w - 1) / gbm_w);
 
-  texlink_buf_t *buf = alloc_gbm(gbm_w, gbm_h, DRM_FORMAT_R8, type);
-  if (!buf)
+  texlink_frame_t *frame = alloc_gbm(gbm_w, gbm_h, DRM_FORMAT_R8, type);
+  if (!frame)
     return NULL;
 
   /* Override meta to expose original logical dimensions to the caller */
-  buf->meta.width = w;
-  buf->meta.height = h;
-  buf->meta.format = format;
-  buf->meta.size = (uint32_t)sz; /* logical size; buf->size is physical */
-  return buf;
+  frame->meta.width = w;
+  frame->meta.height = h;
+  frame->meta.format = format;
+  frame->meta.size = (uint32_t)sz; /* logical size; frame->size is physical */
+  return frame;
 }
 
-static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                                texlink_type_t type) {
-  texlink_buf_t *buf = calloc(1, sizeof(*buf));
-  if (!buf)
+static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
+                                  texlink_type_t type) {
+  texlink_frame_t *frame = calloc(1, sizeof(*frame));
+  if (!frame)
     return NULL;
 
-  buf->dma_fd = -1;
-  buf->sync_fd = -1;
-  buf->map_ptr = MAP_FAILED;
+  frame->dma_fd = -1;
+  frame->sync_fd = -1;
+  frame->index = -1;
+  frame->map_ptr = MAP_FAILED;
 
-  buf->drm_fd = open_drm_render_node();
-  if (buf->drm_fd < 0) {
-    free(buf);
+  frame->drm_fd = open_drm_render_node();
+  if (frame->drm_fd < 0) {
+    free(frame);
     return NULL;
   }
 
-  buf->gbm = gbm_create_device(buf->drm_fd);
-  if (!buf->gbm) {
-    close(buf->drm_fd);
-    free(buf);
+  frame->gbm = gbm_create_device(frame->drm_fd);
+  if (!frame->gbm) {
+    close(frame->drm_fd);
+    free(frame);
     return NULL;
   }
 
   uint32_t real_h = (type == TEXLINK_TYPE_TEXTURE_CUBE) ? h * 6 : h;
 
   /* Try linear first for CPU-accessible export, fall back to default */
-  buf->bo = gbm_bo_create(buf->gbm, w, real_h, format,
-                          GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
-  if (!buf->bo)
-    buf->bo = gbm_bo_create(buf->gbm, w, real_h, format, GBM_BO_USE_RENDERING);
-  if (!buf->bo) {
-    gbm_device_destroy(buf->gbm);
-    close(buf->drm_fd);
-    free(buf);
+  frame->bo = gbm_bo_create(frame->gbm, w, real_h, format,
+                            GBM_BO_USE_LINEAR | GBM_BO_USE_RENDERING);
+  if (!frame->bo)
+    frame->bo =
+        gbm_bo_create(frame->gbm, w, real_h, format, GBM_BO_USE_RENDERING);
+  if (!frame->bo) {
+    gbm_device_destroy(frame->gbm);
+    close(frame->drm_fd);
+    free(frame);
     return NULL;
   }
 
-  buf->dma_fd = gbm_bo_get_fd(buf->bo);
-  if (buf->dma_fd < 0) {
-    gbm_bo_destroy(buf->bo);
-    gbm_device_destroy(buf->gbm);
-    close(buf->drm_fd);
-    free(buf);
+  frame->dma_fd = gbm_bo_get_fd(frame->bo);
+  if (frame->dma_fd < 0) {
+    gbm_bo_destroy(frame->bo);
+    gbm_device_destroy(frame->gbm);
+    close(frame->drm_fd);
+    free(frame);
     return NULL;
   }
 
-  uint32_t stride = gbm_bo_get_stride(buf->bo);
-  buf->size = (size_t)stride * real_h;
-  buf->meta.type = type;
-  buf->meta.width = w;
-  buf->meta.height = h;
-  buf->meta.depth = (type == TEXLINK_TYPE_TEXTURE_3D) ? 1 : 1;
-  buf->meta.stride = stride;
-  buf->meta.format = format;
-  buf->meta.modifier = gbm_bo_get_modifier(buf->bo);
-  buf->meta.size = (uint32_t)buf->size;
-  return buf;
+  uint32_t stride = gbm_bo_get_stride(frame->bo);
+  frame->size = (size_t)stride * real_h;
+  frame->meta.type = type;
+  frame->meta.width = w;
+  frame->meta.height = h;
+  frame->meta.depth = (type == TEXLINK_TYPE_TEXTURE_3D) ? 1 : 1;
+  frame->meta.stride = stride;
+  frame->meta.format = format;
+  frame->meta.modifier = gbm_bo_get_modifier(frame->bo);
+  frame->meta.size = (uint32_t)frame->size;
+  return frame;
 }
 
-texlink_buf_t *texlink_buf_alloc(uint32_t w, uint32_t h, uint32_t format,
-                                 texlink_type_t type) {
+texlink_frame_t *texlink_frame_create(uint32_t w, uint32_t h, uint32_t format,
+                                      texlink_type_t type) {
   switch (type) {
   case TEXLINK_TYPE_RAW:
   case TEXLINK_TYPE_VERTEX_BUFFER:
@@ -178,61 +181,57 @@ texlink_buf_t *texlink_buf_alloc(uint32_t w, uint32_t h, uint32_t format,
   }
 }
 
-void texlink_buf_free(texlink_buf_t *buf) {
-  if (!buf)
+void texlink_frame_destroy(texlink_frame_t *frame) {
+  if (!frame)
     return;
 
-  if (buf->map_ptr != MAP_FAILED && buf->map_ptr)
-    munmap(buf->map_ptr, buf->size);
-  if (buf->sync_fd >= 0)
-    close(buf->sync_fd);
-  if (buf->dma_fd >= 0)
-    close(buf->dma_fd);
-  if (buf->bo)
-    gbm_bo_destroy(buf->bo);
-  if (buf->gbm)
-    gbm_device_destroy(buf->gbm);
-  if (buf->drm_fd >= 0)
-    close(buf->drm_fd);
+  if (frame->map_ptr != MAP_FAILED && frame->map_ptr)
+    munmap(frame->map_ptr, frame->size);
+  if (frame->sync_fd >= 0)
+    close(frame->sync_fd);
+  if (frame->dma_fd >= 0)
+    close(frame->dma_fd);
+  if (frame->bo)
+    gbm_bo_destroy(frame->bo);
+  if (frame->gbm)
+    gbm_device_destroy(frame->gbm);
+  if (frame->drm_fd >= 0)
+    close(frame->drm_fd);
 
-  free(buf);
+  free(frame);
 }
 
-texlink_meta_t texlink_buf_meta(texlink_buf_t *buf) {
-  if (!buf) {
+texlink_meta_t texlink_frame_meta(texlink_frame_t *frame) {
+  if (!frame) {
     texlink_meta_t zero = {0};
     return zero;
   }
-  return buf->meta;
+  return frame->meta;
 }
 
-int texlink_buf_get_dma_fd(texlink_buf_t *buf) {
-  return buf ? buf->dma_fd : -1;
+int texlink_frame_index(texlink_frame_t *frame) {
+  return frame ? frame->index : -1;
 }
 
-int texlink_buf_get_sync_fd(texlink_buf_t *buf) {
-  return buf ? buf->sync_fd : -1;
+int texlink_frame_get_dma_fd(texlink_frame_t *frame) {
+  return frame ? frame->dma_fd : -1;
 }
 
-void *texlink_buf_map(texlink_buf_t *buf) {
-  if (!buf)
+int texlink_frame_get_sync_fd(texlink_frame_t *frame) {
+  return frame ? frame->sync_fd : -1;
+}
+
+void *texlink_frame_map(texlink_frame_t *frame) {
+  if (!frame)
     return NULL;
-  if (buf->map_ptr != MAP_FAILED && buf->map_ptr)
-    return buf->map_ptr;
+  if (frame->map_ptr != MAP_FAILED && frame->map_ptr)
+    return frame->map_ptr;
 
-  buf->map_ptr =
-      mmap(NULL, buf->size, PROT_READ | PROT_WRITE, MAP_SHARED, buf->dma_fd, 0);
-  if (buf->map_ptr == MAP_FAILED) {
-    buf->map_ptr = NULL;
+  frame->map_ptr = mmap(NULL, frame->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                        frame->dma_fd, 0);
+  if (frame->map_ptr == MAP_FAILED) {
+    frame->map_ptr = NULL;
     return NULL;
   }
-  return buf->map_ptr;
-}
-
-void texlink_buf_unmap(texlink_buf_t *buf) {
-  if (!buf || !buf->map_ptr || buf->map_ptr == MAP_FAILED)
-    return;
-
-  munmap(buf->map_ptr, buf->size);
-  buf->map_ptr = NULL;
+  return frame->map_ptr;
 }

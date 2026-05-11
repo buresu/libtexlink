@@ -26,14 +26,16 @@ typedef enum {
 
 typedef struct texlink_session texlink_session_t;
 
-struct texlink_buf {
+struct texlink_frame {
   int dma_fd;
   int sync_fd;
+  int index;
   void *map_ptr;
   size_t size;
+  uint32_t active_access;
   texlink_meta_t meta;
 
-  /* GBM-backed (texture types) — NULL for dma_heap or consumer-side bufs */
+  /* GBM-backed (texture types) — NULL for dma_heap or consumer-side frames */
   struct gbm_bo *bo;
   struct gbm_device *gbm;
   int drm_fd;
@@ -83,7 +85,7 @@ struct texlink_session {
   int sock_fd;
   int shm_fd;
   texlink_shm_t *shm;
-  texlink_buf_t *bufs[TEXLINK_MAX_BUFS];
+  texlink_frame_t *frames[TEXLINK_MAX_BUFS];
   int buf_count;
   texlink_buffering_t buffering;
   int is_producer;
@@ -100,8 +102,8 @@ struct texlink_server {
   int client_fds[TEXLINK_MAX_CLIENTS];
   int shm_fd;
   texlink_shm_t *shm;
-  texlink_buf_t **bufs;
-  uint32_t buffer_count;
+  texlink_frame_t **frames;
+  uint32_t frame_count;
   texlink_backend_t backend;
   texlink_state_t state;
   int last_error;
@@ -135,6 +137,9 @@ int texlink_recv_frame(int sock, texlink_frame_msg_t *msg, int *sync_fd);
 /* sync.c */
 int texlink_export_sync_file(int dma_fd);
 int texlink_wait_sync_file(int sync_fd, int timeout_ms);
+
+/* frame.c */
+void *texlink_frame_map(texlink_frame_t *frame);
 
 /* registry.c */
 void texlink_registry_announce(const char *name, const char *path);

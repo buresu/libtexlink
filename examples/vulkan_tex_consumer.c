@@ -3,8 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <texlink.h>
 #include <drm_fourcc.h>
+#include <texlink.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -464,23 +464,28 @@ int main(void) {
   ImportedImage images[MAX_IMAGES];
   memset(images, 0, sizeof(images));
 
-  for (int i = 0; i < MAX_IMAGES; i++) {
-    texlink_buf_t *buf = texlink_client_buf(client, i);
-    if (!buf)
+  uint32_t frame_count = texlink_client_frame_count(client);
+  if (frame_count > MAX_IMAGES)
+    frame_count = MAX_IMAGES;
+  for (uint32_t i = 0; i < frame_count; i++) {
+    texlink_frame_t *frame = texlink_client_frame(client, i);
+    if (!frame)
       break;
-    import_dma_buf_image(&vk, &images[i], texlink_buf_get_dma_fd(buf), &meta);
+    import_dma_buf_image(&vk, &images[i], texlink_frame_get_dma_fd(frame),
+                         &meta);
   }
 
   while (!glfwWindowShouldClose(window)) {
-    int idx = texlink_client_acquire_frame(client);
-    if (idx < 0) {
+    texlink_frame_t *frame = texlink_client_acquire_frame(client);
+    if (!frame) {
       fprintf(stderr, "Acquire failed\n");
       break;
     }
+    int idx = texlink_frame_index(frame);
 
     display_frame(&vk, &images[idx], &meta);
 
-    texlink_client_release_frame(client, idx);
+    texlink_client_release_frame(client, frame);
     glfwPollEvents();
   }
 

@@ -55,7 +55,7 @@ typedef struct {
   uint64_t frame_id;
 } texlink_meta_t;
 
-typedef struct texlink_buf texlink_buf_t;
+typedef struct texlink_frame texlink_frame_t;
 typedef struct texlink_server texlink_server_t;
 typedef struct texlink_client texlink_client_t;
 
@@ -67,8 +67,8 @@ typedef struct {
 
   texlink_backend_t backend;
 
-  texlink_buf_t **bufs;
-  uint32_t buffer_count;
+  texlink_frame_t **frames;
+  uint32_t frame_count;
 
   uint32_t flags;
 } texlink_server_desc_t;
@@ -89,8 +89,8 @@ typedef struct {
 texlink_server_t *texlink_server_create(const texlink_server_desc_t *desc);
 int texlink_server_start(texlink_server_t *server);
 int texlink_server_poll(texlink_server_t *server);
-int texlink_server_begin_frame(texlink_server_t *server);
-int texlink_server_end_frame(texlink_server_t *server, int idx);
+texlink_frame_t *texlink_server_begin_frame(texlink_server_t *server);
+int texlink_server_end_frame(texlink_server_t *server, texlink_frame_t *frame);
 int texlink_server_client_count(texlink_server_t *server);
 void texlink_server_destroy(texlink_server_t *server);
 
@@ -99,30 +99,30 @@ texlink_client_t *texlink_client_create(const texlink_client_desc_t *desc);
 int texlink_client_connect(texlink_client_t *client);
 void texlink_client_disconnect(texlink_client_t *client);
 void texlink_client_destroy(texlink_client_t *client);
-int texlink_client_acquire_frame(texlink_client_t *client);
-void texlink_client_release_frame(texlink_client_t *client, int idx);
-texlink_buf_t *texlink_client_buf(texlink_client_t *client, int idx);
+texlink_frame_t *texlink_client_acquire_frame(texlink_client_t *client);
+void texlink_client_release_frame(texlink_client_t *client,
+                                  texlink_frame_t *frame);
+uint32_t texlink_client_frame_count(texlink_client_t *client);
+texlink_frame_t *texlink_client_frame(texlink_client_t *client, uint32_t idx);
 texlink_meta_t texlink_client_meta(texlink_client_t *client);
 
-/* Buffer API */
-texlink_buf_t *texlink_buf_alloc(uint32_t width, uint32_t height,
-                                 uint32_t format, texlink_type_t type);
-void texlink_buf_free(texlink_buf_t *buf);
-texlink_meta_t texlink_buf_meta(texlink_buf_t *buf);
+/* Frame API */
+texlink_frame_t *texlink_frame_create(uint32_t width, uint32_t height,
+                                      uint32_t format, texlink_type_t type);
+void texlink_frame_destroy(texlink_frame_t *frame);
+texlink_meta_t texlink_frame_meta(texlink_frame_t *frame);
+int texlink_frame_index(texlink_frame_t *frame);
 
 /* Native handle accessors */
-int texlink_buf_get_dma_fd(texlink_buf_t *buf);
-int texlink_buf_get_sync_fd(texlink_buf_t *buf);
-void *texlink_buf_map(texlink_buf_t *buf);
-void texlink_buf_unmap(texlink_buf_t *buf);
+int texlink_frame_get_dma_fd(texlink_frame_t *frame);
+int texlink_frame_get_sync_fd(texlink_frame_t *frame);
 
 /*
- * Mapped DMA-BUF access synchronization, required on ARM and other
- * non-coherent systems. Call begin_access() before reading or writing a mapped
- * region, and end_access() when done.
+ * Host access to a DMA-BUF-backed frame. The implementation maps the frame
+ * and performs any required CPU cache coherency synchronization.
  */
-int texlink_buf_begin_access(texlink_buf_t *buf, uint32_t access);
-int texlink_buf_end_access(texlink_buf_t *buf, uint32_t access);
+void *texlink_frame_begin_access(texlink_frame_t *frame, uint32_t access);
+int texlink_frame_end_access(texlink_frame_t *frame);
 
 /* Name-based discovery (Spout-style registry) */
 #define TEXLINK_NAME_MAX 64

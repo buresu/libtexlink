@@ -37,26 +37,37 @@ static uint64_t dma_buf_sync_flags(uint32_t access) {
   return DMA_BUF_SYNC_READ;
 }
 
-int texlink_buf_begin_access(texlink_buf_t *buf, uint32_t access) {
-  if (!buf || buf->dma_fd < 0)
-    return -1;
+void *texlink_frame_begin_access(texlink_frame_t *frame, uint32_t access) {
+  if (!frame || frame->dma_fd < 0)
+    return NULL;
   if (!(access & (TEXLINK_ACCESS_READ | TEXLINK_ACCESS_WRITE)))
-    return -EINVAL;
+    return NULL;
+  if (frame->active_access)
+    return NULL;
+
+  void *ptr = texlink_frame_map(frame);
+  if (!ptr)
+    return NULL;
 
   struct dma_buf_sync sync = {
       .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(access),
   };
-  return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
+  if (ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync) < 0)
+    return NULL;
+
+  frame->active_access = access;
+  return ptr;
 }
 
-int texlink_buf_end_access(texlink_buf_t *buf, uint32_t access) {
-  if (!buf || buf->dma_fd < 0)
+int texlink_frame_end_access(texlink_frame_t *frame) {
+  if (!frame || frame->dma_fd < 0)
     return -1;
-  if (!(access & (TEXLINK_ACCESS_READ | TEXLINK_ACCESS_WRITE)))
+  if (!frame->active_access)
     return -EINVAL;
 
   struct dma_buf_sync sync = {
-      .flags = DMA_BUF_SYNC_END | dma_buf_sync_flags(access),
+      .flags = DMA_BUF_SYNC_END | dma_buf_sync_flags(frame->active_access),
   };
-  return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
+  frame->active_access = 0;
+  return ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
 }

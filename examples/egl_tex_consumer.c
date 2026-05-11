@@ -37,7 +37,8 @@ static float quad[] = {
 
 typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
 
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const texlink_meta_t *m) {
+static EGLImage import_dma_buf(EGLDisplay dpy, int fd,
+                               const texlink_meta_t *m) {
   EGLAttrib attrs[] = {
       EGL_WIDTH,
       (EGLAttrib)m->width,
@@ -100,14 +101,17 @@ int main(void) {
 
   EGLImage images[2];
   GLuint textures[2];
-  for (int i = 0; i < 2; i++) {
-    texlink_buf_t *buf = texlink_client_buf(client, i);
-    if (!buf)
+  uint32_t frame_count = texlink_client_frame_count(client);
+  if (frame_count > 2)
+    frame_count = 2;
+  for (uint32_t i = 0; i < frame_count; i++) {
+    texlink_frame_t *frame = texlink_client_frame(client, i);
+    if (!frame)
       break;
 
-    images[i] = import_dma_buf(dpy, texlink_buf_get_dma_fd(buf), &meta);
+    images[i] = import_dma_buf(dpy, texlink_frame_get_dma_fd(frame), &meta);
     if (images[i] == EGL_NO_IMAGE) {
-      fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
+      fprintf(stderr, "eglCreateImage failed for frame %u\n", i);
       return 1;
     }
 
@@ -151,11 +155,12 @@ int main(void) {
   glBindVertexArray(0);
 
   while (!glfwWindowShouldClose(win)) {
-    int idx = texlink_client_acquire_frame(client);
-    if (idx < 0) {
+    texlink_frame_t *frame = texlink_client_acquire_frame(client);
+    if (!frame) {
       fprintf(stderr, "Acquire failed (producer disconnected?)\n");
       break;
     }
+    int idx = texlink_frame_index(frame);
 
     int fb_w, fb_h;
     glfwGetFramebufferSize(win, &fb_w, &fb_h);
@@ -175,7 +180,7 @@ int main(void) {
     glBindVertexArray(0);
     glUseProgram(0);
 
-    texlink_client_release_frame(client, idx);
+    texlink_client_release_frame(client, frame);
 
     glfwSwapBuffers(win);
     glfwPollEvents();

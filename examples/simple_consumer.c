@@ -42,27 +42,25 @@ int main(int argc, char **argv) {
   printf("Connected.\n");
 
   texlink_meta_t meta = texlink_client_meta(client);
-  printf("Buffer: %u bytes  format=0x%x\n", meta.size, meta.format);
+  printf("Frame: %u bytes  format=0x%x\n", meta.size, meta.format);
 
   while (1) {
-    int idx = texlink_client_acquire_frame(client);
-    if (idx < 0) {
+    texlink_frame_t *frame = texlink_client_acquire_frame(client);
+    if (!frame) {
       fprintf(stderr, "Acquire failed (producer disconnected?)\n");
       break;
     }
 
-    texlink_buf_t *buf = texlink_client_buf(client, idx);
     texlink_meta_t cur_meta = texlink_client_meta(client);
-    uint64_t *data = texlink_buf_map(buf);
+    uint64_t *data = texlink_frame_begin_access(frame, TEXLINK_ACCESS_READ);
     if (data) {
-      texlink_buf_begin_access(buf, TEXLINK_ACCESS_READ);
       uint64_t val = data[0];
-      texlink_buf_end_access(buf, TEXLINK_ACCESS_READ);
-      printf("frame=%" PRIu64 "  buf=%d  val=%" PRIu64 "\n", cur_meta.frame_id,
-             idx, val);
+      texlink_frame_end_access(frame);
+      printf("frame=%" PRIu64 "  slot=%d  val=%" PRIu64 "\n", cur_meta.frame_id,
+             texlink_frame_index(frame), val);
     }
 
-    texlink_client_release_frame(client, idx);
+    texlink_client_release_frame(client, frame);
   }
 
   texlink_client_destroy(client);
