@@ -1,7 +1,6 @@
 #define _GNU_SOURCE
 #include "texlink_internal.h"
 
-#include <drm_fourcc.h>
 #include <fcntl.h>
 #include <gbm.h>
 #include <linux/dma-heap.h>
@@ -83,13 +82,14 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
 
   /*
    * dma_heap not accessible (e.g. root-only). Fall back to GBM with
-   * DRM_FORMAT_R8 (1 byte/px) shaped to cover the requested byte count.
+   * R8 (1 byte/px) shaped to cover the requested byte count.
    * The allocated stride may be larger due to GPU alignment, which is fine.
    */
   uint32_t gbm_w = (sz <= 4096) ? (uint32_t)sz : 4096u;
   uint32_t gbm_h = (uint32_t)((sz + gbm_w - 1) / gbm_w);
 
-  texlink_frame_t *frame = alloc_gbm(gbm_w, gbm_h, DRM_FORMAT_R8, type);
+  texlink_frame_t *frame =
+      alloc_gbm(gbm_w, gbm_h, TEXLINK_FRAME_FORMAT_R8, type);
   if (!frame)
     return NULL;
 

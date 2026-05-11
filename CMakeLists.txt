@@ -11,7 +11,6 @@ option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GBM  REQUIRED gbm)
-pkg_check_modules(DRM  REQUIRED libdrm)
 
 add_library(texlink
     src/buffer.c
@@ -33,19 +32,16 @@ target_include_directories(texlink
             $<INSTALL_INTERFACE:include>
     PRIVATE src
             ${GBM_INCLUDE_DIRS}
-            ${DRM_INCLUDE_DIRS}
 )
 
 target_link_libraries(texlink
     PUBLIC ${GBM_LIBRARIES}
-           ${DRM_LIBRARIES}
            rt
 )
 
 target_compile_options(texlink PRIVATE
     -Wall -Wextra -Wpedantic
     ${GBM_CFLAGS_OTHER}
-    ${DRM_CFLAGS_OTHER}
 )
 
 if(TEXLINK_BUILD_EXAMPLES)
@@ -76,7 +72,6 @@ if(TEXLINK_BUILD_EXAMPLES)
                 include
                 ${GLFW3_INCLUDE_DIRS}
                 ${EGL_INCLUDE_DIRS}
-                ${DRM_INCLUDE_DIRS}
             )
             target_compile_options(${example} PRIVATE
                 -Wall -Wextra
@@ -101,7 +96,6 @@ if(TEXLINK_BUILD_EXAMPLES)
                     include
                     ${GLFW3_INCLUDE_DIRS}
                     ${Vulkan_INCLUDE_DIRS}
-                    ${DRM_INCLUDE_DIRS}
             )
             target_compile_definitions(${example} PRIVATE
                     GLFW_INCLUDE_VULKAN

@@ -23,6 +23,19 @@ typedef enum {
   TEXLINK_FRAME_TYPE_RAW,
 } texlink_frame_type_t;
 
+#define TEXLINK_FOURCC_CODE(a, b, c, d)                                        \
+  ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) |              \
+   ((uint32_t)(d) << 24))
+
+typedef enum {
+  TEXLINK_FRAME_FORMAT_UNKNOWN = 0,
+  TEXLINK_FRAME_FORMAT_R8 = TEXLINK_FOURCC_CODE('R', '8', ' ', ' '),
+  TEXLINK_FRAME_FORMAT_ARGB8888 = TEXLINK_FOURCC_CODE('A', 'R', '2', '4'),
+  TEXLINK_FRAME_FORMAT_XRGB8888 = TEXLINK_FOURCC_CODE('X', 'R', '2', '4'),
+  TEXLINK_FRAME_FORMAT_ABGR8888 = TEXLINK_FOURCC_CODE('A', 'B', '2', '4'),
+  TEXLINK_FRAME_FORMAT_XBGR8888 = TEXLINK_FOURCC_CODE('X', 'B', '2', '4'),
+} texlink_frame_format_t;
+
 typedef enum {
   TEXLINK_ACCESS_READ = 1u << 0,
   TEXLINK_ACCESS_WRITE = 1u << 1,

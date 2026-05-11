@@ -1,10 +1,9 @@
-#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 199309L
 #include <GLFW/glfw3.h>
 
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <drm_fourcc.h>
 #include <texlink.h>
 
 #include <math.h>
@@ -508,14 +507,14 @@ int main(void) {
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
-          .format = DRM_FORMAT_ARGB8888,
+          .format = TEXLINK_FRAME_FORMAT_ARGB8888,
       }),
       texlink_frame_create(&(texlink_frame_desc_t){
           .version = 1,
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
-          .format = DRM_FORMAT_ARGB8888,
+          .format = TEXLINK_FRAME_FORMAT_ARGB8888,
       }),
   };
   if (!frames[0] || !frames[1]) {

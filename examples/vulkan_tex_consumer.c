@@ -3,7 +3,6 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <drm_fourcc.h>
 #include <texlink.h>
 
 #include <stdio.h>

@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #define GLFW_INCLUDE_NONE
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
