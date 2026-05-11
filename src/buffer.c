@@ -214,7 +214,7 @@ int texlink_buf_get_sync_fd(texlink_buf_t *buf) {
   return buf ? buf->sync_fd : -1;
 }
 
-void *texlink_buf_map_cpu(texlink_buf_t *buf) {
+void *texlink_buf_map(texlink_buf_t *buf) {
   if (!buf)
     return NULL;
   if (buf->map_ptr != MAP_FAILED && buf->map_ptr)
@@ -227,4 +227,12 @@ void *texlink_buf_map_cpu(texlink_buf_t *buf) {
     return NULL;
   }
   return buf->map_ptr;
+}
+
+void texlink_buf_unmap(texlink_buf_t *buf) {
+  if (!buf || !buf->map_ptr || buf->map_ptr == MAP_FAILED)
+    return;
+
+  munmap(buf->map_ptr, buf->size);
+  buf->map_ptr = NULL;
 }

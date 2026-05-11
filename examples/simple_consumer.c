@@ -53,11 +53,11 @@ int main(int argc, char **argv) {
 
     texlink_buf_t *buf = texlink_client_buf(client, idx);
     texlink_meta_t cur_meta = texlink_client_meta(client);
-    uint64_t *data = texlink_buf_map_cpu(buf);
+    uint64_t *data = texlink_buf_map(buf);
     if (data) {
-      texlink_buf_cpu_begin(buf, 0);
+      texlink_buf_begin_access(buf, TEXLINK_ACCESS_READ);
       uint64_t val = data[0];
-      texlink_buf_cpu_end(buf, 0);
+      texlink_buf_end_access(buf, TEXLINK_ACCESS_READ);
       printf("frame=%" PRIu64 "  buf=%d  val=%" PRIu64 "\n", cur_meta.frame_id,
              idx, val);
     }

@@ -29,28 +29,34 @@ int texlink_wait_sync_file(int sync_fd, int timeout_ms) {
   return 0;
 }
 
-/*
- * CPU cache coherency sync — required on non-coherent systems (ARM, etc.).
- * Must be called around every CPU read/write of a DMA-BUF mapped region.
- */
-int texlink_buf_cpu_begin(texlink_buf_t *buf, int write) {
+static uint64_t dma_buf_sync_flags(uint32_t access) {
+  if ((access & TEXLINK_ACCESS_READ) && (access & TEXLINK_ACCESS_WRITE))
+    return DMA_BUF_SYNC_RW;
+  if (access & TEXLINK_ACCESS_WRITE)
+    return DMA_BUF_SYNC_WRITE;
+  return DMA_BUF_SYNC_READ;
+}
+
+int texlink_buf_begin_access(texlink_buf_t *buf, uint32_t access) {
   if (!buf || buf->dma_fd < 0)
     return -1;
+  if (!(access & (TEXLINK_ACCESS_READ | TEXLINK_ACCESS_WRITE)))
+    return -EINVAL;
 
   struct dma_buf_sync sync = {
-      .flags =
-          DMA_BUF_SYNC_START | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ),
+      .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(access),
   };
   return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
 }
 
-int texlink_buf_cpu_end(texlink_buf_t *buf, int write) {
+int texlink_buf_end_access(texlink_buf_t *buf, uint32_t access) {
   if (!buf || buf->dma_fd < 0)
     return -1;
+  if (!(access & (TEXLINK_ACCESS_READ | TEXLINK_ACCESS_WRITE)))
+    return -EINVAL;
 
   struct dma_buf_sync sync = {
-      .flags =
-          DMA_BUF_SYNC_END | (write ? DMA_BUF_SYNC_WRITE : DMA_BUF_SYNC_READ),
+      .flags = DMA_BUF_SYNC_END | dma_buf_sync_flags(access),
   };
   return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
 }

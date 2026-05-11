@@ -67,13 +67,13 @@ int main(int argc, char **argv) {
     if (idx < 0)
       break;
 
-    uint64_t *data = texlink_buf_map_cpu(bufs[idx]);
+    uint64_t *data = texlink_buf_map(bufs[idx]);
     if (data) {
       counter++;
-      texlink_buf_cpu_begin(bufs[idx], 1);
+      texlink_buf_begin_access(bufs[idx], TEXLINK_ACCESS_WRITE);
       data[0] = counter;
       memset(data + 1, (int)(counter & 0xff), BUF_SIZE - sizeof(uint64_t));
-      texlink_buf_cpu_end(bufs[idx], 1);
+      texlink_buf_end_access(bufs[idx], TEXLINK_ACCESS_WRITE);
     }
 
     texlink_server_end_frame(server, idx);

@@ -28,6 +28,11 @@ typedef enum {
 } texlink_type_t;
 
 typedef enum {
+  TEXLINK_ACCESS_READ = 1u << 0,
+  TEXLINK_ACCESS_WRITE = 1u << 1,
+} texlink_access_t;
+
+typedef enum {
   TEXLINK_STATE_CLOSED = 0,
   TEXLINK_STATE_CREATED,
   TEXLINK_STATE_LISTENING,
@@ -108,16 +113,16 @@ texlink_meta_t texlink_buf_meta(texlink_buf_t *buf);
 /* Native handle accessors */
 int texlink_buf_get_dma_fd(texlink_buf_t *buf);
 int texlink_buf_get_sync_fd(texlink_buf_t *buf);
-void *texlink_buf_map_cpu(texlink_buf_t *buf);
+void *texlink_buf_map(texlink_buf_t *buf);
+void texlink_buf_unmap(texlink_buf_t *buf);
 
 /*
- * CPU cache coherency sync (required on ARM and other non-coherent systems).
- * Call texlink_buf_cpu_begin() before any CPU read/write of a mapped DMA-BUF
- * region, and texlink_buf_cpu_end() when done. write=1 for writes, write=0 for
- * reads.
+ * Mapped DMA-BUF access synchronization, required on ARM and other
+ * non-coherent systems. Call begin_access() before reading or writing a mapped
+ * region, and end_access() when done.
  */
-int texlink_buf_cpu_begin(texlink_buf_t *buf, int write);
-int texlink_buf_cpu_end(texlink_buf_t *buf, int write);
+int texlink_buf_begin_access(texlink_buf_t *buf, uint32_t access);
+int texlink_buf_end_access(texlink_buf_t *buf, uint32_t access);
 
 /* Name-based discovery (Spout-style registry) */
 #define TEXLINK_NAME_MAX 64
