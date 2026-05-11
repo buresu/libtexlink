@@ -62,6 +62,18 @@ typedef struct texlink_client texlink_client_t;
 typedef struct {
   uint32_t version;
 
+  texlink_type_t type;
+  uint32_t width;
+  uint32_t height;
+  uint32_t depth;
+  uint32_t format;
+  uint64_t size;
+  uint32_t flags;
+} texlink_frame_desc_t;
+
+typedef struct {
+  uint32_t version;
+
   const char *name;
   const char *path;
 
@@ -107,8 +119,7 @@ texlink_frame_t *texlink_client_frame(texlink_client_t *client, uint32_t idx);
 texlink_meta_t texlink_client_meta(texlink_client_t *client);
 
 /* Frame API */
-texlink_frame_t *texlink_frame_create(uint32_t width, uint32_t height,
-                                      uint32_t format, texlink_type_t type);
+texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc);
 void texlink_frame_destroy(texlink_frame_t *frame);
 texlink_meta_t texlink_frame_meta(texlink_frame_t *frame);
 int texlink_frame_index(texlink_frame_t *frame);

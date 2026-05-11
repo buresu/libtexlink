@@ -29,8 +29,16 @@ int main(int argc, char **argv) {
 
   /* Double-buffering: two raw frames */
   texlink_frame_t *frames[2] = {
-      texlink_frame_create(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW),
-      texlink_frame_create(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW),
+      texlink_frame_create(&(texlink_frame_desc_t){
+          .version = 1,
+          .type = TEXLINK_TYPE_RAW,
+          .size = BUF_SIZE,
+      }),
+      texlink_frame_create(&(texlink_frame_desc_t){
+          .version = 1,
+          .type = TEXLINK_TYPE_RAW,
+          .size = BUF_SIZE,
+      }),
   };
 
   if (!frames[0] || !frames[1]) {
