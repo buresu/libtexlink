@@ -50,7 +50,7 @@ static int entry_alive(const texlink_registry_entry_t *e) {
 
 /*
  * Low-level: write name+path into the registry without a session object.
- * Used by texlink_serve_named() before accept() so consumers can connect.
+ * Used by texlink_server_start() before accept() so consumers can connect.
  */
 void texlink_registry_announce(const char *name, const char *path) {
   int fd = registry_open_locked(O_RDWR | O_CREAT);
@@ -90,71 +90,17 @@ void texlink_registry_announce(const char *name, const char *path) {
   close(fd);
 }
 
-int texlink_register(texlink_session_t *s, const char *name) {
-  if (!s || !s->is_producer || !name || name[0] == '\0')
+int texlink_registry_unregister(const char *name) {
+  if (!name || name[0] == '\0')
     return -1;
 
-  strncpy(s->reg_name, name, TEXLINK_NAME_MAX - 1);
-
-  int fd = registry_open_locked(O_RDWR | O_CREAT);
+  int fd = open(TEXLINK_REGISTRY_PATH, O_RDWR | O_CLOEXEC);
   if (fd < 0)
     return -1;
 
-  texlink_registry_t reg;
-  registry_read(fd, &reg);
-
-  /* Evict stale entries and any previous entry with the same name */
-  for (int i = 0; i < TEXLINK_MAX_SESSIONS; i++) {
-    texlink_registry_entry_t *e = &reg.entries[i];
-    if (!e->active)
-      continue;
-    if (!entry_alive(e) || strncmp(e->name, name, TEXLINK_NAME_MAX) == 0)
-      memset(e, 0, sizeof(*e));
-  }
-
-  /* Find a free slot */
-  int slot = -1;
-  for (int i = 0; i < TEXLINK_MAX_SESSIONS; i++) {
-    if (!reg.entries[i].active) {
-      slot = i;
-      break;
-    }
-  }
-
-  if (slot < 0) {
-    flock(fd, LOCK_UN);
-    close(fd);
-    return -1; /* registry full */
-  }
-
-  texlink_registry_entry_t *e = &reg.entries[slot];
-  strncpy(e->name, name, TEXLINK_NAME_MAX - 1);
-  strncpy(e->path, s->sock_path, sizeof(e->path) - 1);
-  e->pid = getpid();
-  e->active = 1;
-
-  registry_write(fd, &reg);
-  flock(fd, LOCK_UN);
-  close(fd);
-
-  s->is_registered = 1;
-  return 0;
-}
-
-void texlink_unregister(texlink_session_t *s) {
-  if (!s || !s->is_registered)
-    return;
-
-  int fd = open(TEXLINK_REGISTRY_PATH, O_RDWR | O_CLOEXEC);
-  if (fd < 0) {
-    s->is_registered = 0;
-    return;
-  }
-
   if (flock(fd, LOCK_EX) < 0) {
     close(fd);
-    s->is_registered = 0;
-    return;
+    return -1;
   }
 
   texlink_registry_t reg;
@@ -164,7 +110,7 @@ void texlink_unregister(texlink_session_t *s) {
   for (int i = 0; i < TEXLINK_MAX_SESSIONS; i++) {
     texlink_registry_entry_t *e = &reg.entries[i];
     if (e->active && e->pid == my_pid &&
-        strncmp(e->name, s->reg_name, TEXLINK_NAME_MAX) == 0) {
+        strncmp(e->name, name, TEXLINK_NAME_MAX) == 0) {
       memset(e, 0, sizeof(*e));
       break;
     }
@@ -173,11 +119,10 @@ void texlink_unregister(texlink_session_t *s) {
   registry_write(fd, &reg);
   flock(fd, LOCK_UN);
   close(fd);
-
-  s->is_registered = 0;
+  return 0;
 }
 
-int texlink_list_sessions(char (*names)[TEXLINK_NAME_MAX], int max) {
+int texlink_registry_list(char (*names)[TEXLINK_NAME_MAX], int max) {
   if (!names || max <= 0)
     return 0;
 
@@ -206,17 +151,17 @@ int texlink_list_sessions(char (*names)[TEXLINK_NAME_MAX], int max) {
   return count;
 }
 
-texlink_session_t *texlink_connect_by_name(const char *name) {
-  if (!name)
-    return NULL;
+int texlink_registry_resolve(const char *name, char *path, size_t path_size) {
+  if (!name || !path || path_size == 0)
+    return -1;
 
   int fd = open(TEXLINK_REGISTRY_PATH, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
-    return NULL;
+    return -1;
 
   if (flock(fd, LOCK_SH) < 0) {
     close(fd);
-    return NULL;
+    return -1;
   }
 
   texlink_registry_t reg;
@@ -227,8 +172,10 @@ texlink_session_t *texlink_connect_by_name(const char *name) {
   for (int i = 0; i < TEXLINK_MAX_SESSIONS; i++) {
     texlink_registry_entry_t *e = &reg.entries[i];
     if (entry_alive(e) && strncmp(e->name, name, TEXLINK_NAME_MAX) == 0) {
-      return texlink_connect(e->path);
+      strncpy(path, e->path, path_size - 1);
+      path[path_size - 1] = '\0';
+      return 0;
     }
   }
-  return NULL;
+  return -1;
 }

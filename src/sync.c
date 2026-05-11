@@ -33,7 +33,7 @@ int texlink_wait_sync_file(int sync_fd, int timeout_ms) {
  * CPU cache coherency sync — required on non-coherent systems (ARM, etc.).
  * Must be called around every CPU read/write of a DMA-BUF mapped region.
  */
-int texlink_cpu_begin(texlink_buf_t *buf, int write) {
+int texlink_buf_cpu_begin(texlink_buf_t *buf, int write) {
   if (!buf || buf->dma_fd < 0)
     return -1;
 
@@ -44,7 +44,7 @@ int texlink_cpu_begin(texlink_buf_t *buf, int write) {
   return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
 }
 
-int texlink_cpu_end(texlink_buf_t *buf, int write) {
+int texlink_buf_cpu_end(texlink_buf_t *buf, int write) {
   if (!buf || buf->dma_fd < 0)
     return -1;
 

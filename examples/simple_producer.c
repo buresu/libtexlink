@@ -29,51 +29,60 @@ int main(int argc, char **argv) {
 
   /* Double-buffering: two raw buffers */
   texlink_buf_t *bufs[2] = {
-      texlink_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
-      texlink_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
+      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
+      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
   };
 
   if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "texlink_alloc failed\n");
+    fprintf(stderr, "texlink_buf_alloc failed\n");
     return 1;
   }
 
   /*
-   * texlink_serve_named():
+   * texlink_server_start():
    *   1. bind socket at /tmp/texlink/<name>.sock
-   *   2. register name in global registry  ← consumer can find it now
-   *   3. block waiting for consumer connection
+   *   2. register name in global registry
+   *   3. poll accepts consumers while frames are produced
    */
-  printf("Registering \"%s\", waiting for consumer...\n", name);
-  texlink_session_t *s = texlink_serve_named(name, bufs, TEXLINK_BUFFERING_DOUBLE);
-  if (!s) {
-    fprintf(stderr, "texlink_serve_named failed\n");
+  printf("Serving \"%s\"...\n", name);
+  texlink_server_desc_t desc = {
+      .version = 1,
+      .name = name,
+      .backend = TEXLINK_BACKEND_CPU,
+      .bufs = bufs,
+      .buffer_count = 2,
+  };
+  texlink_server_t *server = texlink_server_create(&desc);
+  if (!server || texlink_server_start(server) < 0) {
+    fprintf(stderr, "texlink_server_start failed\n");
     return 1;
   }
-  printf("Consumer connected. Producing frames...\n");
+  printf("Producing frames...\n");
 
   uint64_t counter = 0;
   while (1) {
-    int idx = texlink_producer_begin(s);
+    texlink_server_poll(server);
+
+    int idx = texlink_server_begin_frame(server);
     if (idx < 0)
       break;
 
-    uint64_t *data = texlink_map_cpu(bufs[idx]);
+    uint64_t *data = texlink_buf_map_cpu(bufs[idx]);
     if (data) {
       counter++;
-      texlink_cpu_begin(bufs[idx], 1);
+      texlink_buf_cpu_begin(bufs[idx], 1);
       data[0] = counter;
       memset(data + 1, (int)(counter & 0xff), BUF_SIZE - sizeof(uint64_t));
-      texlink_cpu_end(bufs[idx], 1);
+      texlink_buf_cpu_end(bufs[idx], 1);
     }
 
-    texlink_producer_end(s, idx);
+    texlink_server_end_frame(server, idx);
     printf("frame=%" PRIu64 "  buf=%d\n", counter, idx);
     sleep_ms(16);
   }
 
-  texlink_session_close(s); /* also unregisters from registry */
-  texlink_free(bufs[0]);
-  texlink_free(bufs[1]);
+  texlink_server_destroy(server); /* also unregisters from registry */
+  texlink_buf_free(bufs[0]);
+  texlink_buf_free(bufs[1]);
   return 0;
 }

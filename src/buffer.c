@@ -160,8 +160,8 @@ static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   return buf;
 }
 
-texlink_buf_t *texlink_alloc(uint32_t w, uint32_t h, uint32_t format,
-                         texlink_type_t type, texlink_backend_t backend) {
+texlink_buf_t *texlink_buf_alloc(uint32_t w, uint32_t h, uint32_t format,
+                             texlink_type_t type, texlink_backend_t backend) {
   texlink_buf_t *buf;
   switch (type) {
   case TEXLINK_TYPE_RAW:
@@ -185,7 +185,7 @@ texlink_buf_t *texlink_alloc(uint32_t w, uint32_t h, uint32_t format,
   return buf;
 }
 
-void texlink_free(texlink_buf_t *buf) {
+void texlink_buf_free(texlink_buf_t *buf) {
   if (!buf)
     return;
 
@@ -205,11 +205,23 @@ void texlink_free(texlink_buf_t *buf) {
   free(buf);
 }
 
-int texlink_get_dma_fd(texlink_buf_t *buf) { return buf ? buf->dma_fd : -1; }
+texlink_meta_t texlink_buf_meta(texlink_buf_t *buf) {
+  if (!buf) {
+    texlink_meta_t zero = {0};
+    return zero;
+  }
+  return buf->meta;
+}
 
-int texlink_get_sync_fd(texlink_buf_t *buf) { return buf ? buf->sync_fd : -1; }
+int texlink_buf_get_dma_fd(texlink_buf_t *buf) {
+  return buf ? buf->dma_fd : -1;
+}
 
-void *texlink_map_cpu(texlink_buf_t *buf) {
+int texlink_buf_get_sync_fd(texlink_buf_t *buf) {
+  return buf ? buf->sync_fd : -1;
+}
+
+void *texlink_buf_map_cpu(texlink_buf_t *buf) {
   if (!buf)
     return NULL;
   if (buf->map_ptr != MAP_FAILED && buf->map_ptr)

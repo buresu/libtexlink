@@ -83,7 +83,7 @@ int texlink_socket_bind(const char *path) {
   unlink(path);
 
   if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ||
-      listen(fd, 1) < 0) {
+      listen(fd, TEXLINK_MAX_CLIENTS) < 0) {
     close(fd);
     return -1;
   }

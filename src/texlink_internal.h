@@ -13,9 +13,18 @@ struct gbm_bo;
 #define TEXLINK_SHM_PREFIX "/texlink_"
 #define TEXLINK_PROTO_VER 1
 #define TEXLINK_NAME_MAX 64
+#define TEXLINK_MAX_CLIENTS 16
 #define TEXLINK_MAX_SESSIONS 64
 #define TEXLINK_REGISTRY_PATH "/tmp/texlink/.registry"
 #define TEXLINK_REGISTRY_MAGIC 0x544C4E4Bu /* TLNK */
+
+typedef enum {
+  TEXLINK_BUFFERING_SINGLE = 1,
+  TEXLINK_BUFFERING_DOUBLE = 2,
+  TEXLINK_BUFFERING_TRIPLE = 3,
+} texlink_buffering_t;
+
+typedef struct texlink_session texlink_session_t;
 
 struct texlink_buf {
   int dma_fd;
@@ -86,6 +95,35 @@ struct texlink_session {
   char reg_name[TEXLINK_NAME_MAX];
 };
 
+struct texlink_server {
+  int listen_fd;
+  int client_fds[TEXLINK_MAX_CLIENTS];
+  int shm_fd;
+  texlink_shm_t *shm;
+  texlink_buf_t **bufs;
+  uint32_t buffer_count;
+  texlink_backend_t backend;
+  texlink_state_t state;
+  int last_error;
+  int write_idx;
+  int is_registered;
+  uint32_t flags;
+  char shm_name[64];
+  char name[TEXLINK_NAME_MAX];
+  char path[108];
+};
+
+struct texlink_client {
+  texlink_session_t *session;
+  texlink_backend_t backend;
+  texlink_state_t state;
+  int last_error;
+  int timeout_ms;
+  uint32_t flags;
+  char name[TEXLINK_NAME_MAX];
+  char path[108];
+};
+
 /* socket.c */
 int texlink_send_fds(int sock, const int *fds, int nfds);
 int texlink_recv_fds(int sock, int *fds, int nfds);
@@ -97,10 +135,7 @@ int texlink_recv_frame(int sock, texlink_frame_msg_t *msg, int *sync_fd);
 /* sync.c */
 int texlink_export_sync_file(int dma_fd);
 int texlink_wait_sync_file(int sync_fd, int timeout_ms);
-int texlink_cpu_begin(texlink_buf_t *buf, int write);
-int texlink_cpu_end(texlink_buf_t *buf, int write);
 
 /* registry.c */
 void texlink_registry_announce(const char *name, const char *path);
-int texlink_register(texlink_session_t *s, const char *name);
-void texlink_unregister(texlink_session_t *s);
+int texlink_registry_unregister(const char *name);

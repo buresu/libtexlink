@@ -58,128 +58,7 @@ static void session_free_consumer_bufs(texlink_session_t *s) {
   }
 }
 
-static texlink_session_t *serve_accept(int listen_fd, const char *path,
-                                     texlink_buf_t **bufs,
-                                     texlink_buffering_t buffering) {
-  int buf_count = (int)buffering;
-
-  texlink_session_t *s = session_alloc();
-  if (!s)
-    return NULL;
-
-  s->is_producer = 1;
-  s->buf_count = buf_count;
-  s->buffering = buffering;
-  for (int i = 0; i < buf_count; i++)
-    s->bufs[i] = bufs[i];
-
-  strncpy(s->sock_path, path, sizeof(s->sock_path) - 1);
-  make_shm_name(path, s->shm_name, sizeof(s->shm_name));
-  shm_unlink(s->shm_name);
-
-  s->shm_fd = shm_open(s->shm_name, O_CREAT | O_RDWR, 0600);
-  if (s->shm_fd < 0)
-    goto err;
-
-  if (ftruncate(s->shm_fd, sizeof(texlink_shm_t)) < 0)
-    goto err;
-
-  s->shm = mmap(NULL, sizeof(texlink_shm_t), PROT_READ | PROT_WRITE, MAP_SHARED,
-                s->shm_fd, 0);
-  if (s->shm == MAP_FAILED)
-    goto err;
-
-  atomic_store(&s->shm->frame_id, 0);
-  atomic_store(&s->shm->current_idx, 0);
-  s->shm->buf_count = (uint32_t)buf_count;
-  s->shm->meta = bufs[0]->meta;
-
-  int client_fd = accept4(listen_fd, NULL, NULL, SOCK_CLOEXEC);
-  if (client_fd < 0)
-    goto err;
-  s->sock_fd = client_fd;
-
-  texlink_handshake_t hs = {
-      .version = TEXLINK_PROTO_VER,
-      .buf_count = (uint32_t)buf_count,
-      .buffering = buffering,
-      .meta = bufs[0]->meta,
-  };
-  strncpy(hs.shm_name, s->shm_name, sizeof(hs.shm_name) - 1);
-
-  if (send(client_fd, &hs, sizeof(hs), MSG_NOSIGNAL) != sizeof(hs))
-    goto err_sock;
-
-  for (int i = 0; i < buf_count; i++) {
-    if (texlink_send_fds(client_fd, &bufs[i]->dma_fd, 1) < 0)
-      goto err_sock;
-  }
-
-  return s;
-
-err_sock:
-  close(client_fd);
-  s->sock_fd = -1;
-err:
-  if (s->shm && s->shm != MAP_FAILED)
-    munmap(s->shm, sizeof(texlink_shm_t));
-  if (s->shm_fd >= 0) {
-    close(s->shm_fd);
-    shm_unlink(s->shm_name);
-  }
-  free(s);
-  return NULL;
-}
-
-texlink_session_t *texlink_serve(const char *path, texlink_buf_t **bufs,
-                             texlink_buffering_t buffering) {
-  if ((int)buffering < 1 || (int)buffering > TEXLINK_MAX_BUFS || !bufs)
-    return NULL;
-
-  make_socket_dir(path);
-
-  int listen_fd = texlink_socket_bind(path);
-  if (listen_fd < 0)
-    return NULL;
-
-  texlink_session_t *s = serve_accept(listen_fd, path, bufs, buffering);
-  close(listen_fd);
-  return s;
-}
-
-/*
- * Named serve: bind → register in global registry → accept.
- * This allows consumers to discover the session by name before connecting.
- */
-texlink_session_t *texlink_serve_named(const char *name, texlink_buf_t **bufs,
-                                   texlink_buffering_t buffering) {
-  if (!name || name[0] == '\0')
-    return NULL;
-  if ((int)buffering < 1 || (int)buffering > TEXLINK_MAX_BUFS || !bufs)
-    return NULL;
-
-  char path[128];
-  snprintf(path, sizeof(path), "/tmp/texlink/%s.sock", name);
-  make_socket_dir(path);
-
-  int listen_fd = texlink_socket_bind(path);
-  if (listen_fd < 0)
-    return NULL;
-
-  /* Register name → socket path BEFORE blocking on accept,
-   * so consumers can discover and connect while we wait. */
-  texlink_registry_announce(name, path);
-
-  texlink_session_t *s = serve_accept(listen_fd, path, bufs, buffering);
-  close(listen_fd);
-
-  if (s)
-    s->is_registered = 1; /* already announced; mark for unregister on close */
-
-  return s;
-}
-
-texlink_session_t *texlink_connect(const char *path) {
+static texlink_session_t *session_connect(const char *path) {
   int sock_fd = texlink_socket_connect(path);
   if (sock_fd < 0)
     return NULL;
@@ -243,11 +122,14 @@ err:
   return NULL;
 }
 
-void texlink_session_close(texlink_session_t *s) {
+static void session_close(texlink_session_t *s) {
   if (!s)
     return;
 
-  texlink_unregister(s);
+  if (s->is_registered) {
+    texlink_registry_unregister(s->reg_name);
+    s->is_registered = 0;
+  }
 
   if (s->shm && s->shm != MAP_FAILED)
     munmap(s->shm, sizeof(texlink_shm_t));
@@ -266,13 +148,13 @@ void texlink_session_close(texlink_session_t *s) {
   free(s);
 }
 
-texlink_buf_t *texlink_session_buf(texlink_session_t *s, int idx) {
+static texlink_buf_t *session_buf(texlink_session_t *s, int idx) {
   if (!s || idx < 0 || idx >= s->buf_count)
     return NULL;
   return s->bufs[idx];
 }
 
-texlink_meta_t texlink_session_meta(texlink_session_t *s) {
+static texlink_meta_t session_meta(texlink_session_t *s) {
   if (!s || !s->shm) {
     texlink_meta_t zero = {0};
     return zero;
@@ -283,69 +165,7 @@ texlink_meta_t texlink_session_meta(texlink_session_t *s) {
   return m;
 }
 
-int texlink_producer_begin(texlink_session_t *s) {
-  if (!s || !s->is_producer)
-    return -1;
-
-  int idx;
-  switch (s->buffering) {
-  case TEXLINK_BUFFERING_SINGLE:
-    idx = 0;
-    break;
-  case TEXLINK_BUFFERING_DOUBLE: {
-    /* Write to the buffer the consumer is NOT currently reading */
-    uint32_t cur = atomic_load(&s->shm->current_idx);
-    idx = 1 - (int)(cur & 1);
-    break;
-  }
-  case TEXLINK_BUFFERING_TRIPLE: {
-    /* Pick a slot that the consumer is NOT currently reading */
-    uint32_t cur = atomic_load(&s->shm->current_idx);
-    idx = s->write_idx;
-    if ((uint32_t)idx == cur)
-      idx = (idx + 1) % 3;
-    break;
-  }
-  default:
-    return -1;
-  }
-
-  return idx;
-}
-
-void texlink_producer_end(texlink_session_t *s, int idx) {
-  if (!s || !s->is_producer || idx < 0 || idx >= s->buf_count)
-    return;
-
-  /*
-   * Export the GPU fence BEFORE updating shm so that the fence captures
-   * all GPU work submitted to this buffer in this frame.
-   */
-  int sync_fd = texlink_export_sync_file(s->bufs[idx]->dma_fd);
-  if (s->bufs[idx]->sync_fd >= 0)
-    close(s->bufs[idx]->sync_fd);
-  s->bufs[idx]->sync_fd = sync_fd;
-
-  /* Commit to shared memory — store_release semantics via atomic_store */
-  uint64_t frame_id = atomic_fetch_add(&s->shm->frame_id, 1) + 1;
-  s->shm->meta.frame_id = frame_id;
-  atomic_store_explicit(&s->shm->current_idx, (uint32_t)idx,
-                        memory_order_release);
-
-  /* Advance triple-buffer write cursor for next producer_begin() */
-  if (s->buffering == TEXLINK_BUFFERING_TRIPLE)
-    s->write_idx = (idx + 1) % 3;
-
-  /* Notify consumer via socket (data + optional SCM_RIGHTS fence) */
-  texlink_frame_msg_t msg = {
-      .frame_id = frame_id,
-      .buf_idx = (uint32_t)idx,
-      .has_sync_fd = (sync_fd >= 0) ? 1 : 0,
-  };
-  texlink_send_frame(s->sock_fd, &msg, sync_fd);
-}
-
-int texlink_consumer_acquire(texlink_session_t *s) {
+static int session_consumer_acquire(texlink_session_t *s) {
   if (!s || s->is_producer)
     return -1;
 
@@ -381,8 +201,377 @@ int texlink_consumer_acquire(texlink_session_t *s) {
   return idx;
 }
 
-void texlink_consumer_release(texlink_session_t *s, int idx) {
+static void session_consumer_release(texlink_session_t *s, int idx) {
   /* No-op for now: buffers are read-only on the consumer side */
   (void)s;
   (void)idx;
+}
+
+static void default_path_for_name(const char *name, char *path, size_t len) {
+  snprintf(path, len, "/tmp/texlink/%s.sock", name);
+}
+
+static texlink_buffering_t buffer_count_to_mode(uint32_t count) {
+  switch (count) {
+  case 1:
+    return TEXLINK_BUFFERING_SINGLE;
+  case 2:
+    return TEXLINK_BUFFERING_DOUBLE;
+  case 3:
+    return TEXLINK_BUFFERING_TRIPLE;
+  default:
+    return 0;
+  }
+}
+
+texlink_server_t *texlink_server_create(const texlink_server_desc_t *desc) {
+  if (!desc || !desc->bufs || desc->buffer_count == 0 ||
+      desc->buffer_count > TEXLINK_MAX_BUFS) {
+    return NULL;
+  }
+  if (!desc->path && (!desc->name || desc->name[0] == '\0'))
+    return NULL;
+
+  texlink_server_t *server = calloc(1, sizeof(*server));
+  if (!server)
+    return NULL;
+
+  server->listen_fd = -1;
+  server->shm_fd = -1;
+  server->shm = MAP_FAILED;
+  for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++)
+    server->client_fds[i] = -1;
+  server->bufs = desc->bufs;
+  server->buffer_count = desc->buffer_count;
+  server->backend = desc->backend;
+  server->flags = desc->flags;
+  server->state = TEXLINK_STATE_CREATED;
+
+  if (desc->name)
+    strncpy(server->name, desc->name, sizeof(server->name) - 1);
+  if (desc->path)
+    strncpy(server->path, desc->path, sizeof(server->path) - 1);
+  else
+    default_path_for_name(desc->name, server->path, sizeof(server->path));
+
+  return server;
+}
+
+int texlink_server_start(texlink_server_t *server) {
+  if (!server || server->state != TEXLINK_STATE_CREATED)
+    return -1;
+
+  texlink_buffering_t mode = buffer_count_to_mode(server->buffer_count);
+  if (!mode) {
+    server->last_error = EINVAL;
+    server->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  make_socket_dir(server->path);
+  make_shm_name(server->path, server->shm_name, sizeof(server->shm_name));
+  shm_unlink(server->shm_name);
+
+  server->listen_fd = texlink_socket_bind(server->path);
+  if (server->listen_fd < 0) {
+    server->last_error = errno ? errno : EADDRINUSE;
+    server->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  server->shm_fd = shm_open(server->shm_name, O_CREAT | O_RDWR, 0600);
+  if (server->shm_fd < 0 ||
+      ftruncate(server->shm_fd, sizeof(texlink_shm_t)) < 0) {
+    server->last_error = errno ? errno : EIO;
+    server->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  server->shm = mmap(NULL, sizeof(texlink_shm_t), PROT_READ | PROT_WRITE,
+                     MAP_SHARED, server->shm_fd, 0);
+  if (server->shm == MAP_FAILED) {
+    server->last_error = errno ? errno : EIO;
+    server->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  atomic_store(&server->shm->frame_id, 0);
+  atomic_store(&server->shm->current_idx, 0);
+  server->shm->buf_count = server->buffer_count;
+  server->shm->meta = server->bufs[0]->meta;
+  server->shm->meta.backend = (uint32_t)server->backend;
+
+  if (server->name[0] != '\0') {
+    texlink_registry_announce(server->name, server->path);
+    server->is_registered = 1;
+  }
+
+  (void)mode;
+  server->state = TEXLINK_STATE_LISTENING;
+  return 0;
+}
+
+int texlink_server_poll(texlink_server_t *server) {
+  if (!server)
+    return -1;
+  if (server->state == TEXLINK_STATE_ERROR || server->listen_fd < 0)
+    return -1;
+
+  int accepted = 0;
+  while (1) {
+    struct pollfd pfd = {.fd = server->listen_fd, .events = POLLIN};
+    int ret = poll(&pfd, 1, 0);
+    if (ret <= 0 || !(pfd.revents & POLLIN))
+      break;
+
+    int client_fd = accept4(server->listen_fd, NULL, NULL, SOCK_CLOEXEC);
+    if (client_fd < 0)
+      break;
+
+    int slot = -1;
+    for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++) {
+      if (server->client_fds[i] < 0) {
+        slot = i;
+        break;
+      }
+    }
+    if (slot < 0) {
+      close(client_fd);
+      continue;
+    }
+
+    texlink_handshake_t hs = {
+        .version = TEXLINK_PROTO_VER,
+        .buf_count = server->buffer_count,
+        .buffering = buffer_count_to_mode(server->buffer_count),
+        .meta = server->shm->meta,
+    };
+    strncpy(hs.shm_name, server->shm_name, sizeof(hs.shm_name) - 1);
+
+    if (send(client_fd, &hs, sizeof(hs), MSG_NOSIGNAL) != sizeof(hs)) {
+      close(client_fd);
+      continue;
+    }
+
+    int ok = 1;
+    for (uint32_t i = 0; i < server->buffer_count; i++) {
+      if (texlink_send_fds(client_fd, &server->bufs[i]->dma_fd, 1) < 0) {
+        ok = 0;
+        break;
+      }
+    }
+    if (!ok) {
+      close(client_fd);
+      continue;
+    }
+
+    server->client_fds[slot] = client_fd;
+    accepted++;
+  }
+
+  if (accepted > 0)
+    server->state = TEXLINK_STATE_CONNECTED;
+  return accepted;
+}
+
+int texlink_server_begin_frame(texlink_server_t *server) {
+  if (!server || !server->shm || server->shm == MAP_FAILED)
+    return -1;
+
+  switch (buffer_count_to_mode(server->buffer_count)) {
+  case TEXLINK_BUFFERING_SINGLE:
+    return 0;
+  case TEXLINK_BUFFERING_DOUBLE: {
+    uint32_t cur = atomic_load(&server->shm->current_idx);
+    return 1 - (int)(cur & 1);
+  }
+  case TEXLINK_BUFFERING_TRIPLE: {
+    uint32_t cur = atomic_load(&server->shm->current_idx);
+    int idx = server->write_idx;
+    if ((uint32_t)idx == cur)
+      idx = (idx + 1) % 3;
+    return idx;
+  }
+  default:
+    return -1;
+  }
+}
+
+int texlink_server_end_frame(texlink_server_t *server, int idx) {
+  if (!server || !server->shm || server->shm == MAP_FAILED || idx < 0 ||
+      (uint32_t)idx >= server->buffer_count)
+    return -1;
+
+  int sync_fd = texlink_export_sync_file(server->bufs[idx]->dma_fd);
+  if (server->bufs[idx]->sync_fd >= 0)
+    close(server->bufs[idx]->sync_fd);
+  server->bufs[idx]->sync_fd = sync_fd;
+
+  uint64_t frame_id = atomic_fetch_add(&server->shm->frame_id, 1) + 1;
+  server->shm->meta.frame_id = frame_id;
+  atomic_store_explicit(&server->shm->current_idx, (uint32_t)idx,
+                        memory_order_release);
+
+  if (server->buffer_count == 3)
+    server->write_idx = (idx + 1) % 3;
+
+  texlink_frame_msg_t msg = {
+      .frame_id = frame_id,
+      .buf_idx = (uint32_t)idx,
+      .has_sync_fd = (sync_fd >= 0) ? 1 : 0,
+  };
+
+  for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++) {
+    int fd = server->client_fds[i];
+    if (fd < 0)
+      continue;
+    if (texlink_send_frame(fd, &msg, sync_fd) < 0) {
+      close(fd);
+      server->client_fds[i] = -1;
+    }
+  }
+  return 0;
+}
+
+int texlink_server_client_count(texlink_server_t *server) {
+  if (!server)
+    return 0;
+  int count = 0;
+  for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++) {
+    if (server->client_fds[i] >= 0)
+      count++;
+  }
+  return count;
+}
+
+void texlink_server_destroy(texlink_server_t *server) {
+  if (!server)
+    return;
+  if (server->is_registered)
+    texlink_registry_unregister(server->name);
+  for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++) {
+    if (server->client_fds[i] >= 0)
+      close(server->client_fds[i]);
+  }
+  if (server->listen_fd >= 0)
+    close(server->listen_fd);
+  if (server->shm && server->shm != MAP_FAILED)
+    munmap(server->shm, sizeof(texlink_shm_t));
+  if (server->shm_fd >= 0) {
+    close(server->shm_fd);
+    shm_unlink(server->shm_name);
+  }
+  if (server->path[0] != '\0')
+    unlink(server->path);
+  server->state = TEXLINK_STATE_CLOSED;
+  free(server);
+}
+
+texlink_client_t *texlink_client_create(const texlink_client_desc_t *desc) {
+  if (!desc || (!desc->path && (!desc->name || desc->name[0] == '\0')))
+    return NULL;
+
+  texlink_client_t *client = calloc(1, sizeof(*client));
+  if (!client)
+    return NULL;
+
+  client->backend = desc->backend;
+  client->timeout_ms = desc->timeout_ms;
+  client->flags = desc->flags;
+  client->state = TEXLINK_STATE_CREATED;
+
+  if (desc->name)
+    strncpy(client->name, desc->name, sizeof(client->name) - 1);
+  if (desc->path)
+    strncpy(client->path, desc->path, sizeof(client->path) - 1);
+
+  return client;
+}
+
+int texlink_client_connect(texlink_client_t *client) {
+  if (!client || client->state != TEXLINK_STATE_CREATED)
+    return -1;
+
+  client->state = TEXLINK_STATE_CONNECTING;
+  if (client->path[0] == '\0' &&
+      texlink_registry_resolve(client->name, client->path,
+                               sizeof(client->path)) < 0) {
+    client->last_error = ENOENT;
+    client->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  client->session = session_connect(client->path);
+  if (!client->session) {
+    client->last_error = errno ? errno : ECONNREFUSED;
+    client->state = TEXLINK_STATE_ERROR;
+    return -1;
+  }
+
+  client->state = TEXLINK_STATE_CONNECTED;
+  return 0;
+}
+
+void texlink_client_disconnect(texlink_client_t *client) {
+  if (!client)
+    return;
+  session_close(client->session);
+  client->session = NULL;
+  client->state = TEXLINK_STATE_DISCONNECTED;
+}
+
+void texlink_client_destroy(texlink_client_t *client) {
+  if (!client)
+    return;
+  texlink_client_disconnect(client);
+  client->state = TEXLINK_STATE_CLOSED;
+  free(client);
+}
+
+int texlink_client_acquire_frame(texlink_client_t *client) {
+  if (!client || !client->session)
+    return -1;
+  return session_consumer_acquire(client->session);
+}
+
+void texlink_client_release_frame(texlink_client_t *client, int idx) {
+  if (!client || !client->session)
+    return;
+  session_consumer_release(client->session, idx);
+}
+
+texlink_buf_t *texlink_client_buf(texlink_client_t *client, int idx) {
+  if (!client || !client->session)
+    return NULL;
+  return session_buf(client->session, idx);
+}
+
+texlink_meta_t texlink_client_meta(texlink_client_t *client) {
+  if (!client || !client->session) {
+    texlink_meta_t zero = {0};
+    return zero;
+  }
+  return session_meta(client->session);
+}
+
+texlink_state_t texlink_server_state(texlink_server_t *server) {
+  return server ? server->state : TEXLINK_STATE_CLOSED;
+}
+
+texlink_state_t texlink_client_state(texlink_client_t *client) {
+  return client ? client->state : TEXLINK_STATE_CLOSED;
+}
+
+int texlink_server_last_error(texlink_server_t *server) {
+  return server ? server->last_error : EINVAL;
+}
+
+int texlink_client_last_error(texlink_client_t *client) {
+  return client ? client->last_error : EINVAL;
+}
+
+const char *texlink_error_string(int err) {
+  if (err == 0)
+    return "no error";
+  return strerror(err);
 }

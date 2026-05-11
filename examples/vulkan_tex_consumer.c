@@ -293,7 +293,8 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
  *
  * The producer leaves shared images in GENERAL; we transition from there.
  * On the very first frame current_layout is UNDEFINED (discard is fine because
- * texlink_consumer_acquire has already confirmed the producer wrote new data).
+ * texlink_client_acquire_frame has already confirmed the producer wrote new
+ * data).
  */
 static void display_frame(VulkanContext *ctx, ImportedImage *img,
                           const texlink_meta_t *meta) {
@@ -445,27 +446,33 @@ int main(void) {
   create_swapchain(&vk);
 
   printf("Connecting to 'texshare'...\n");
-  texlink_session_t *session = texlink_connect_by_name("texshare");
-  if (!session) {
-    fprintf(stderr, "texlink_connect_by_name failed\n");
+  texlink_client_desc_t desc = {
+      .version = 1,
+      .name = "texshare",
+      .backend = TEXLINK_BACKEND_VULKAN,
+      .timeout_ms = 5000,
+  };
+  texlink_client_t *client = texlink_client_create(&desc);
+  if (!client || texlink_client_connect(client) < 0) {
+    fprintf(stderr, "texlink_client_connect failed\n");
     return 1;
   }
   printf("Connected.\n");
 
-  texlink_meta_t meta = texlink_session_meta(session);
+  texlink_meta_t meta = texlink_client_meta(client);
 
   ImportedImage images[MAX_IMAGES];
   memset(images, 0, sizeof(images));
 
   for (int i = 0; i < MAX_IMAGES; i++) {
-    texlink_buf_t *buf = texlink_session_buf(session, i);
+    texlink_buf_t *buf = texlink_client_buf(client, i);
     if (!buf)
       break;
-    import_dma_buf_image(&vk, &images[i], texlink_get_dma_fd(buf), &meta);
+    import_dma_buf_image(&vk, &images[i], texlink_buf_get_dma_fd(buf), &meta);
   }
 
   while (!glfwWindowShouldClose(window)) {
-    int idx = texlink_consumer_acquire(session);
+    int idx = texlink_client_acquire_frame(client);
     if (idx < 0) {
       fprintf(stderr, "Acquire failed\n");
       break;
@@ -473,11 +480,11 @@ int main(void) {
 
     display_frame(&vk, &images[idx], &meta);
 
-    texlink_consumer_release(session, idx);
+    texlink_client_release_frame(client, idx);
     glfwPollEvents();
   }
 
-  texlink_session_close(session);
+  texlink_client_destroy(client);
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < MAX_IMAGES; i++) {

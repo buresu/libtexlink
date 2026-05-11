@@ -82,24 +82,30 @@ int main(void) {
   }
 
   printf("Connecting to 'texshare'...\n");
-  texlink_session_t *session = texlink_connect_by_name("texshare");
-  if (!session) {
-    fprintf(stderr, "texlink_connect_by_name failed\n");
+  texlink_client_desc_t desc = {
+      .version = 1,
+      .name = "texshare",
+      .backend = TEXLINK_BACKEND_EGL,
+      .timeout_ms = 5000,
+  };
+  texlink_client_t *client = texlink_client_create(&desc);
+  if (!client || texlink_client_connect(client) < 0) {
+    fprintf(stderr, "texlink_client_connect failed\n");
     return 1;
   }
   printf("Connected.\n");
 
   EGLDisplay dpy = eglGetCurrentDisplay();
-  texlink_meta_t meta = texlink_session_meta(session);
+  texlink_meta_t meta = texlink_client_meta(client);
 
   EGLImage images[2];
   GLuint textures[2];
   for (int i = 0; i < 2; i++) {
-    texlink_buf_t *buf = texlink_session_buf(session, i);
+    texlink_buf_t *buf = texlink_client_buf(client, i);
     if (!buf)
       break;
 
-    images[i] = import_dma_buf(dpy, texlink_get_dma_fd(buf), &meta);
+    images[i] = import_dma_buf(dpy, texlink_buf_get_dma_fd(buf), &meta);
     if (images[i] == EGL_NO_IMAGE) {
       fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
       return 1;
@@ -145,7 +151,7 @@ int main(void) {
   glBindVertexArray(0);
 
   while (!glfwWindowShouldClose(win)) {
-    int idx = texlink_consumer_acquire(session);
+    int idx = texlink_client_acquire_frame(client);
     if (idx < 0) {
       fprintf(stderr, "Acquire failed (producer disconnected?)\n");
       break;
@@ -169,13 +175,13 @@ int main(void) {
     glBindVertexArray(0);
     glUseProgram(0);
 
-    texlink_consumer_release(session, idx);
+    texlink_client_release_frame(client, idx);
 
     glfwSwapBuffers(win);
     glfwPollEvents();
   }
 
-  texlink_session_close(session);
+  texlink_client_destroy(client);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

@@ -281,7 +281,7 @@ static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = dup(texlink_get_dma_fd(buf)),
+      .fd = dup(texlink_buf_get_dma_fd(buf)),
   };
   VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -503,13 +503,13 @@ int main(void) {
   create_swapchain(&vk);
 
   texlink_buf_t *bufs[2] = {
-      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
-                  TEXLINK_BACKEND_VULKAN),
-      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
-                  TEXLINK_BACKEND_VULKAN),
+      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_VULKAN),
+      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_VULKAN),
   };
   if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "texlink_alloc failed\n");
+    fprintf(stderr, "texlink_buf_alloc failed\n");
     return 1;
   }
 
@@ -517,38 +517,46 @@ int main(void) {
   setup_shared_image(&vk, &images[0], bufs[0], WIDTH, HEIGHT);
   setup_shared_image(&vk, &images[1], bufs[1], WIDTH, HEIGHT);
 
-  printf("Serving 'texshare', waiting for consumer...\n");
-  texlink_session_t *session =
-      texlink_serve_named("texshare", bufs, TEXLINK_BUFFERING_DOUBLE);
-  if (!session) {
-    fprintf(stderr, "texlink_serve_named failed\n");
+  printf("Serving 'texshare'...\n");
+  texlink_server_desc_t desc = {
+      .version = 1,
+      .name = "texshare",
+      .backend = TEXLINK_BACKEND_VULKAN,
+      .bufs = bufs,
+      .buffer_count = 2,
+  };
+  texlink_server_t *server = texlink_server_create(&desc);
+  if (!server || texlink_server_start(server) < 0) {
+    fprintf(stderr, "texlink_server_start failed\n");
     return 1;
   }
-  printf("Consumer connected. Rendering...\n");
+  printf("Rendering...\n");
 
   double last_frame = glfwGetTime();
 
   while (!glfwWindowShouldClose(window)) {
-    int idx = texlink_producer_begin(session);
+    texlink_server_poll(server);
+
+    int idx = texlink_server_begin_frame(server);
     if (idx < 0)
       break;
 
     render_frame(&vk, &images[idx], (float)glfwGetTime());
     preview_frame(&vk, images[idx].image);
 
-    texlink_producer_end(session, idx);
+    texlink_server_end_frame(server, idx);
     glfwPollEvents();
     sleep_until_next_frame(&last_frame, 1.0 / 60.0);
   }
 
-  texlink_session_close(session);
+  texlink_server_destroy(server);
 
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < 2; i++) {
     vkDestroyImage(vk.device, images[i].image, NULL);
     vkFreeMemory(vk.device, images[i].memory, NULL);
-    texlink_free(bufs[i]);
+    texlink_buf_free(bufs[i]);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);

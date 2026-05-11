@@ -98,32 +98,38 @@ int main(void) {
   }
 
   texlink_buf_t *bufs[2] = {
-      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
-                  TEXLINK_BACKEND_EGL),
-      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
-                  TEXLINK_BACKEND_EGL),
+      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_EGL),
+      texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
+                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_EGL),
   };
   if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "texlink_alloc failed\n");
+    fprintf(stderr, "texlink_buf_alloc failed\n");
     return 1;
   }
 
-  printf("Serving 'texshare', waiting for consumer...\n");
-  texlink_session_t *session =
-      texlink_serve_named("texshare", bufs, TEXLINK_BUFFERING_DOUBLE);
-  if (!session) {
-    fprintf(stderr, "texlink_serve_named failed\n");
+  printf("Serving 'texshare'...\n");
+  texlink_server_desc_t desc = {
+      .version = 1,
+      .name = "texshare",
+      .backend = TEXLINK_BACKEND_EGL,
+      .bufs = bufs,
+      .buffer_count = 2,
+  };
+  texlink_server_t *server = texlink_server_create(&desc);
+  if (!server || texlink_server_start(server) < 0) {
+    fprintf(stderr, "texlink_server_start failed\n");
     return 1;
   }
-  printf("Consumer connected. Rendering...\n");
+  printf("Rendering...\n");
 
   EGLDisplay dpy = eglGetCurrentDisplay();
-  texlink_meta_t meta = texlink_session_meta(session);
+  texlink_meta_t meta = texlink_buf_meta(bufs[0]);
 
   EGLImage images[2];
   GLuint textures[2], fbos[2], rbos[2];
   for (int i = 0; i < 2; i++) {
-    images[i] = import_dma_buf(dpy, texlink_get_dma_fd(bufs[i]), &meta);
+    images[i] = import_dma_buf(dpy, texlink_buf_get_dma_fd(bufs[i]), &meta);
     if (images[i] == EGL_NO_IMAGE) {
       fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
       return 1;
@@ -186,7 +192,9 @@ int main(void) {
 
   double last_frame = glfwGetTime();
   while (!glfwWindowShouldClose(win)) {
-    int idx = texlink_producer_begin(session);
+    texlink_server_poll(server);
+
+    int idx = texlink_server_begin_frame(server);
     if (idx < 0)
       break;
 
@@ -205,7 +213,7 @@ int main(void) {
     glUseProgram(0);
 
     glFlush();
-    texlink_producer_end(session, idx);
+    texlink_server_end_frame(server, idx);
 
     /* Blit shared FBO to window for preview */
     int win_w, win_h;
@@ -220,9 +228,9 @@ int main(void) {
     glfwPollEvents();
   }
 
-  texlink_session_close(session);
-  texlink_free(bufs[0]);
-  texlink_free(bufs[1]);
+  texlink_server_destroy(server);
+  texlink_buf_free(bufs[0]);
+  texlink_buf_free(bufs[1]);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;
