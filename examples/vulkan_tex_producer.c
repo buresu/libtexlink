@@ -505,14 +505,14 @@ int main(void) {
   texlink_frame_t *frames[2] = {
       texlink_frame_create(&(texlink_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_TYPE_TEXTURE_2D,
+          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
           .format = DRM_FORMAT_ARGB8888,
       }),
       texlink_frame_create(&(texlink_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_TYPE_TEXTURE_2D,
+          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
           .format = DRM_FORMAT_ARGB8888,

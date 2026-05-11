@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                                  texlink_type_t type);
+                                  texlink_frame_type_t type);
 
 static int open_drm_render_node(void) {
   char path[32];
@@ -54,7 +54,8 @@ static int alloc_dma_heap(size_t size) {
 }
 
 static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
-                                     uint32_t format, texlink_type_t type) {
+                                     uint32_t format,
+                                     texlink_frame_type_t type) {
   int dma_fd = alloc_dma_heap(sz);
 
   if (dma_fd >= 0) {
@@ -101,7 +102,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
 }
 
 static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                                  texlink_type_t type) {
+                                  texlink_frame_type_t type) {
   texlink_frame_t *frame = calloc(1, sizeof(*frame));
   if (!frame)
     return NULL;
@@ -124,7 +125,7 @@ static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
     return NULL;
   }
 
-  uint32_t real_h = (type == TEXLINK_TYPE_TEXTURE_CUBE) ? h * 6 : h;
+  uint32_t real_h = (type == TEXLINK_FRAME_TYPE_TEXTURE_CUBE) ? h * 6 : h;
 
   /* Try linear first for CPU-accessible export, fall back to default */
   frame->bo = gbm_bo_create(frame->gbm, w, real_h, format,
@@ -153,7 +154,7 @@ static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   frame->meta.type = type;
   frame->meta.width = w;
   frame->meta.height = h;
-  frame->meta.depth = (type == TEXLINK_TYPE_TEXTURE_3D) ? 1 : 1;
+  frame->meta.depth = (type == TEXLINK_FRAME_TYPE_TEXTURE_3D) ? 1 : 1;
   frame->meta.stride = stride;
   frame->meta.format = format;
   frame->meta.modifier = gbm_bo_get_modifier(frame->bo);
@@ -171,17 +172,17 @@ texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc) {
   size_t size = desc->size ? (size_t)desc->size : (size_t)desc->width * h;
 
   switch (desc->type) {
-  case TEXLINK_TYPE_RAW:
-  case TEXLINK_TYPE_VERTEX_BUFFER:
-  case TEXLINK_TYPE_COMPUTE_BUFFER:
+  case TEXLINK_FRAME_TYPE_RAW:
+  case TEXLINK_FRAME_TYPE_VERTEX_BUFFER:
+  case TEXLINK_FRAME_TYPE_COMPUTE_BUFFER:
     if (size == 0)
       return NULL;
     return alloc_linear(size, desc->width ? desc->width : (uint32_t)size, h,
                         desc->format, desc->type);
 
-  case TEXLINK_TYPE_TEXTURE_2D:
-  case TEXLINK_TYPE_TEXTURE_3D:
-  case TEXLINK_TYPE_TEXTURE_CUBE:
+  case TEXLINK_FRAME_TYPE_TEXTURE_2D:
+  case TEXLINK_FRAME_TYPE_TEXTURE_3D:
+  case TEXLINK_FRAME_TYPE_TEXTURE_CUBE:
     if (desc->width == 0 || desc->height == 0)
       return NULL;
     return alloc_gbm(desc->width, desc->height, desc->format, desc->type);

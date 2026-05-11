@@ -31,12 +31,12 @@ int main(int argc, char **argv) {
   texlink_frame_t *frames[2] = {
       texlink_frame_create(&(texlink_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_TYPE_RAW,
+          .type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
       texlink_frame_create(&(texlink_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_TYPE_RAW,
+          .type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
   };

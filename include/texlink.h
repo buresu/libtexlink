@@ -15,13 +15,13 @@ typedef enum {
 } texlink_backend_t;
 
 typedef enum {
-  TEXLINK_TYPE_TEXTURE_2D,
-  TEXLINK_TYPE_TEXTURE_3D,
-  TEXLINK_TYPE_TEXTURE_CUBE,
-  TEXLINK_TYPE_VERTEX_BUFFER,
-  TEXLINK_TYPE_COMPUTE_BUFFER,
-  TEXLINK_TYPE_RAW,
-} texlink_type_t;
+  TEXLINK_FRAME_TYPE_TEXTURE_2D,
+  TEXLINK_FRAME_TYPE_TEXTURE_3D,
+  TEXLINK_FRAME_TYPE_TEXTURE_CUBE,
+  TEXLINK_FRAME_TYPE_VERTEX_BUFFER,
+  TEXLINK_FRAME_TYPE_COMPUTE_BUFFER,
+  TEXLINK_FRAME_TYPE_RAW,
+} texlink_frame_type_t;
 
 typedef enum {
   TEXLINK_ACCESS_READ = 1u << 0,
@@ -58,7 +58,7 @@ typedef struct texlink_client texlink_client_t;
 typedef struct {
   uint32_t version;
 
-  texlink_type_t type;
+  texlink_frame_type_t type;
   uint32_t width;
   uint32_t height;
   uint32_t depth;
