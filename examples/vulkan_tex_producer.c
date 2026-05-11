@@ -4,8 +4,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <texlink.h>
 #include <drm_fourcc.h>
+#include <texlink.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -504,9 +504,9 @@ int main(void) {
 
   texlink_buf_t *bufs[2] = {
       texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_VULKAN),
+                        TEXLINK_TYPE_TEXTURE_2D),
       texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_VULKAN),
+                        TEXLINK_TYPE_TEXTURE_2D),
   };
   if (!bufs[0] || !bufs[1]) {
     fprintf(stderr, "texlink_buf_alloc failed\n");

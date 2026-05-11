@@ -29,8 +29,8 @@ int main(int argc, char **argv) {
 
   /* Double-buffering: two raw buffers */
   texlink_buf_t *bufs[2] = {
-      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
-      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW, TEXLINK_BACKEND_CPU),
+      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW),
+      texlink_buf_alloc(BUF_SIZE, 1, 0, TEXLINK_TYPE_RAW),
   };
 
   if (!bufs[0] || !bufs[1]) {

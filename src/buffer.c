@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                              texlink_type_t type);
+                                texlink_type_t type);
 
 static int open_drm_render_node(void) {
   char path[32];
@@ -54,7 +54,7 @@ static int alloc_dma_heap(size_t size) {
 }
 
 static texlink_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
-                                 texlink_type_t type) {
+                                   texlink_type_t type) {
   size_t sz = (size_t)w * (h ? h : 1);
 
   int dma_fd = alloc_dma_heap(sz);
@@ -102,7 +102,7 @@ static texlink_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
 }
 
 static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                              texlink_type_t type) {
+                                texlink_type_t type) {
   texlink_buf_t *buf = calloc(1, sizeof(*buf));
   if (!buf)
     return NULL;
@@ -161,28 +161,21 @@ static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
 }
 
 texlink_buf_t *texlink_buf_alloc(uint32_t w, uint32_t h, uint32_t format,
-                             texlink_type_t type, texlink_backend_t backend) {
-  texlink_buf_t *buf;
+                                 texlink_type_t type) {
   switch (type) {
   case TEXLINK_TYPE_RAW:
   case TEXLINK_TYPE_VERTEX_BUFFER:
   case TEXLINK_TYPE_COMPUTE_BUFFER:
-    buf = alloc_linear(w, h, format, type);
-    break;
+    return alloc_linear(w, h, format, type);
 
   case TEXLINK_TYPE_TEXTURE_2D:
   case TEXLINK_TYPE_TEXTURE_3D:
   case TEXLINK_TYPE_TEXTURE_CUBE:
-    buf = alloc_gbm(w, h, format, type);
-    break;
+    return alloc_gbm(w, h, format, type);
 
   default:
     return NULL;
   }
-
-  if (buf)
-    buf->meta.backend = (uint32_t)backend;
-  return buf;
 }
 
 void texlink_buf_free(texlink_buf_t *buf) {

@@ -5,8 +5,8 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <texlink.h>
 #include <drm_fourcc.h>
+#include <texlink.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -48,14 +48,15 @@ static const char *frag_src = "#version 330 core\n"
                               "void main() { FragColor = v_color; }\n";
 
 static float verts[] = {
-     0.0f,  0.577350f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+    0.0f,  0.577350f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
     -0.5f, -0.288675f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-     0.5f, -0.288675f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+    0.5f,  -0.288675f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
 };
 
 typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
 
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const texlink_meta_t *m) {
+static EGLImage import_dma_buf(EGLDisplay dpy, int fd,
+                               const texlink_meta_t *m) {
   EGLAttrib attrs[] = {
       EGL_WIDTH,
       (EGLAttrib)m->width,
@@ -99,9 +100,9 @@ int main(void) {
 
   texlink_buf_t *bufs[2] = {
       texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_EGL),
+                        TEXLINK_TYPE_TEXTURE_2D),
       texlink_buf_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888,
-                        TEXLINK_TYPE_TEXTURE_2D, TEXLINK_BACKEND_EGL),
+                        TEXLINK_TYPE_TEXTURE_2D),
   };
   if (!bufs[0] || !bufs[1]) {
     fprintf(stderr, "texlink_buf_alloc failed\n");

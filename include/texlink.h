@@ -101,8 +101,7 @@ texlink_meta_t texlink_client_meta(texlink_client_t *client);
 
 /* Buffer API */
 texlink_buf_t *texlink_buf_alloc(uint32_t width, uint32_t height,
-                             uint32_t format, texlink_type_t type,
-                             texlink_backend_t backend);
+                                 uint32_t format, texlink_type_t type);
 void texlink_buf_free(texlink_buf_t *buf);
 texlink_meta_t texlink_buf_meta(texlink_buf_t *buf);
 
