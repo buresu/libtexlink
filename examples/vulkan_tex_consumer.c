@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <dmabuflink.h>
+#include <texlink.h>
 #include <drm_fourcc.h>
 
 #include <stdio.h>
@@ -228,10 +228,10 @@ static void create_swapchain(VulkanContext *ctx) {
 
 /*
  * Import a DMA-BUF fd into Vulkan as a LINEAR image for use as blit source.
- * We dup() the fd: dmabuflink retains the original, Vulkan may consume the dup.
+ * We dup() the fd: texlink retains the original, Vulkan may consume the dup.
  */
 static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
-                                 int dma_fd, const dmabl_meta_t *meta) {
+                                 int dma_fd, const texlink_meta_t *meta) {
   img->dma_fd = dma_fd;
   img->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -293,10 +293,10 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
  *
  * The producer leaves shared images in GENERAL; we transition from there.
  * On the very first frame current_layout is UNDEFINED (discard is fine because
- * dmabl_consumer_acquire has already confirmed the producer wrote new data).
+ * texlink_consumer_acquire has already confirmed the producer wrote new data).
  */
 static void display_frame(VulkanContext *ctx, ImportedImage *img,
-                          const dmabl_meta_t *meta) {
+                          const texlink_meta_t *meta) {
   uint32_t sc_idx = 0;
   VkResult res =
       vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
@@ -345,7 +345,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
   int32_t sw = (int32_t)ctx->sc_extent.width;
   int32_t sh = (int32_t)ctx->sc_extent.height;
   /* EGL/OpenGL stores rows bottom-up; flip Y so the image appears correct. */
-  int flip_y = (meta->backend == DMABL_BACKEND_EGL);
+  int flip_y = (meta->backend == TEXLINK_BACKEND_EGL);
   VkImageBlit region = {
       .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
       .srcOffsets = {{0, flip_y ? (int32_t)meta->height : 0, 0},
@@ -445,27 +445,27 @@ int main(void) {
   create_swapchain(&vk);
 
   printf("Connecting to 'texshare'...\n");
-  dmabl_session_t *session = dmabl_connect_by_name("texshare");
+  texlink_session_t *session = texlink_connect_by_name("texshare");
   if (!session) {
-    fprintf(stderr, "dmabl_connect_by_name failed\n");
+    fprintf(stderr, "texlink_connect_by_name failed\n");
     return 1;
   }
   printf("Connected.\n");
 
-  dmabl_meta_t meta = dmabl_session_meta(session);
+  texlink_meta_t meta = texlink_session_meta(session);
 
   ImportedImage images[MAX_IMAGES];
   memset(images, 0, sizeof(images));
 
   for (int i = 0; i < MAX_IMAGES; i++) {
-    dmabl_buf_t *buf = dmabl_session_buf(session, i);
+    texlink_buf_t *buf = texlink_session_buf(session, i);
     if (!buf)
       break;
-    import_dma_buf_image(&vk, &images[i], dmabl_get_dma_fd(buf), &meta);
+    import_dma_buf_image(&vk, &images[i], texlink_get_dma_fd(buf), &meta);
   }
 
   while (!glfwWindowShouldClose(window)) {
-    int idx = dmabl_consumer_acquire(session);
+    int idx = texlink_consumer_acquire(session);
     if (idx < 0) {
       fprintf(stderr, "Acquire failed\n");
       break;
@@ -473,11 +473,11 @@ int main(void) {
 
     display_frame(&vk, &images[idx], &meta);
 
-    dmabl_consumer_release(session, idx);
+    texlink_consumer_release(session, idx);
     glfwPollEvents();
   }
 
-  dmabl_session_close(session);
+  texlink_session_close(session);
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < MAX_IMAGES; i++) {

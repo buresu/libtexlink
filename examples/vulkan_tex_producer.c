@@ -4,7 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <dmabuflink.h>
+#include <texlink.h>
 #include <drm_fourcc.h>
 
 #include <math.h>
@@ -51,7 +51,7 @@ typedef struct {
 } VulkanContext;
 
 typedef struct {
-  dmabl_buf_t *buf;
+  texlink_buf_t *buf;
   VkImage image;
   VkDeviceMemory memory;
 } SharedImage;
@@ -240,11 +240,11 @@ static void create_swapchain(VulkanContext *ctx) {
 /*
  * Import a GBM-backed DMA-BUF fd into Vulkan as a LINEAR image.
  * We dup() the fd because Vulkan may consume (close) it on import.
- * The original buf->dma_fd remains valid for dmabuflink to send to consumers.
+ * The original buf->dma_fd remains valid for texlink to send to consumers.
  * TRANSFER_DST: for clear  TRANSFER_SRC: for preview blit to swapchain.
  */
 static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
-                               dmabl_buf_t *buf, uint32_t width,
+                               texlink_buf_t *buf, uint32_t width,
                                uint32_t height) {
   img->buf = buf;
 
@@ -281,7 +281,7 @@ static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = dup(dmabl_get_dma_fd(buf)),
+      .fd = dup(texlink_get_dma_fd(buf)),
   };
   VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -502,14 +502,14 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
-  dmabl_buf_t *bufs[2] = {
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
-                  DMABL_BACKEND_VULKAN),
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
-                  DMABL_BACKEND_VULKAN),
+  texlink_buf_t *bufs[2] = {
+      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
+                  TEXLINK_BACKEND_VULKAN),
+      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
+                  TEXLINK_BACKEND_VULKAN),
   };
   if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "dmabl_alloc failed\n");
+    fprintf(stderr, "texlink_alloc failed\n");
     return 1;
   }
 
@@ -518,10 +518,10 @@ int main(void) {
   setup_shared_image(&vk, &images[1], bufs[1], WIDTH, HEIGHT);
 
   printf("Serving 'texshare', waiting for consumer...\n");
-  dmabl_session_t *session =
-      dmabl_serve_named("texshare", bufs, DMABL_BUFFERING_DOUBLE);
+  texlink_session_t *session =
+      texlink_serve_named("texshare", bufs, TEXLINK_BUFFERING_DOUBLE);
   if (!session) {
-    fprintf(stderr, "dmabl_serve_named failed\n");
+    fprintf(stderr, "texlink_serve_named failed\n");
     return 1;
   }
   printf("Consumer connected. Rendering...\n");
@@ -529,26 +529,26 @@ int main(void) {
   double last_frame = glfwGetTime();
 
   while (!glfwWindowShouldClose(window)) {
-    int idx = dmabl_producer_begin(session);
+    int idx = texlink_producer_begin(session);
     if (idx < 0)
       break;
 
     render_frame(&vk, &images[idx], (float)glfwGetTime());
     preview_frame(&vk, images[idx].image);
 
-    dmabl_producer_end(session, idx);
+    texlink_producer_end(session, idx);
     glfwPollEvents();
     sleep_until_next_frame(&last_frame, 1.0 / 60.0);
   }
 
-  dmabl_session_close(session);
+  texlink_session_close(session);
 
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < 2; i++) {
     vkDestroyImage(vk.device, images[i].image, NULL);
     vkFreeMemory(vk.device, images[i].memory, NULL);
-    dmabl_free(bufs[i]);
+    texlink_free(bufs[i]);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);

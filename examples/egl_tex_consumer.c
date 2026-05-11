@@ -5,7 +5,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <dmabuflink.h>
+#include <texlink.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +37,7 @@ static float quad[] = {
 
 typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
 
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const dmabl_meta_t *m) {
+static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const texlink_meta_t *m) {
   EGLAttrib attrs[] = {
       EGL_WIDTH,
       (EGLAttrib)m->width,
@@ -82,24 +82,24 @@ int main(void) {
   }
 
   printf("Connecting to 'texshare'...\n");
-  dmabl_session_t *session = dmabl_connect_by_name("texshare");
+  texlink_session_t *session = texlink_connect_by_name("texshare");
   if (!session) {
-    fprintf(stderr, "dmabl_connect_by_name failed\n");
+    fprintf(stderr, "texlink_connect_by_name failed\n");
     return 1;
   }
   printf("Connected.\n");
 
   EGLDisplay dpy = eglGetCurrentDisplay();
-  dmabl_meta_t meta = dmabl_session_meta(session);
+  texlink_meta_t meta = texlink_session_meta(session);
 
   EGLImage images[2];
   GLuint textures[2];
   for (int i = 0; i < 2; i++) {
-    dmabl_buf_t *buf = dmabl_session_buf(session, i);
+    texlink_buf_t *buf = texlink_session_buf(session, i);
     if (!buf)
       break;
 
-    images[i] = import_dma_buf(dpy, dmabl_get_dma_fd(buf), &meta);
+    images[i] = import_dma_buf(dpy, texlink_get_dma_fd(buf), &meta);
     if (images[i] == EGL_NO_IMAGE) {
       fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
       return 1;
@@ -145,7 +145,7 @@ int main(void) {
   glBindVertexArray(0);
 
   while (!glfwWindowShouldClose(win)) {
-    int idx = dmabl_consumer_acquire(session);
+    int idx = texlink_consumer_acquire(session);
     if (idx < 0) {
       fprintf(stderr, "Acquire failed (producer disconnected?)\n");
       break;
@@ -163,19 +163,19 @@ int main(void) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textures[idx]);
     glUniform1i(tex_loc, 0);
-    glUniform1i(flip_y_loc, meta.backend != DMABL_BACKEND_EGL ? 1 : 0);
+    glUniform1i(flip_y_loc, meta.backend != TEXLINK_BACKEND_EGL ? 1 : 0);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     glUseProgram(0);
 
-    dmabl_consumer_release(session, idx);
+    texlink_consumer_release(session, idx);
 
     glfwSwapBuffers(win);
     glfwPollEvents();
   }
 
-  dmabl_session_close(session);
+  texlink_session_close(session);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

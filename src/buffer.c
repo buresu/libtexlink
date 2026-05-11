@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "dmabuflink_internal.h"
+#include "texlink_internal.h"
 
 #include <drm_fourcc.h>
 #include <fcntl.h>
@@ -13,8 +13,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                              dmabl_type_t type);
+static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
+                              texlink_type_t type);
 
 static int open_drm_render_node(void) {
   char path[32];
@@ -53,15 +53,15 @@ static int alloc_dma_heap(size_t size) {
   return -1;
 }
 
-static dmabl_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
-                                 dmabl_type_t type) {
+static texlink_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
+                                 texlink_type_t type) {
   size_t sz = (size_t)w * (h ? h : 1);
 
   int dma_fd = alloc_dma_heap(sz);
 
   if (dma_fd >= 0) {
     /* Fast path: dma_heap available */
-    dmabl_buf_t *buf = calloc(1, sizeof(*buf));
+    texlink_buf_t *buf = calloc(1, sizeof(*buf));
     if (!buf) {
       close(dma_fd);
       return NULL;
@@ -89,7 +89,7 @@ static dmabl_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
   uint32_t gbm_w = (sz <= 4096) ? (uint32_t)sz : 4096u;
   uint32_t gbm_h = (uint32_t)((sz + gbm_w - 1) / gbm_w);
 
-  dmabl_buf_t *buf = alloc_gbm(gbm_w, gbm_h, DRM_FORMAT_R8, type);
+  texlink_buf_t *buf = alloc_gbm(gbm_w, gbm_h, DRM_FORMAT_R8, type);
   if (!buf)
     return NULL;
 
@@ -101,9 +101,9 @@ static dmabl_buf_t *alloc_linear(uint32_t w, uint32_t h, uint32_t format,
   return buf;
 }
 
-static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
-                              dmabl_type_t type) {
-  dmabl_buf_t *buf = calloc(1, sizeof(*buf));
+static texlink_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
+                              texlink_type_t type) {
+  texlink_buf_t *buf = calloc(1, sizeof(*buf));
   if (!buf)
     return NULL;
 
@@ -124,7 +124,7 @@ static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
     return NULL;
   }
 
-  uint32_t real_h = (type == DMABL_TYPE_TEXTURE_CUBE) ? h * 6 : h;
+  uint32_t real_h = (type == TEXLINK_TYPE_TEXTURE_CUBE) ? h * 6 : h;
 
   /* Try linear first for CPU-accessible export, fall back to default */
   buf->bo = gbm_bo_create(buf->gbm, w, real_h, format,
@@ -152,7 +152,7 @@ static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   buf->meta.type = type;
   buf->meta.width = w;
   buf->meta.height = h;
-  buf->meta.depth = (type == DMABL_TYPE_TEXTURE_3D) ? 1 : 1;
+  buf->meta.depth = (type == TEXLINK_TYPE_TEXTURE_3D) ? 1 : 1;
   buf->meta.stride = stride;
   buf->meta.format = format;
   buf->meta.modifier = gbm_bo_get_modifier(buf->bo);
@@ -160,19 +160,19 @@ static dmabl_buf_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   return buf;
 }
 
-dmabl_buf_t *dmabl_alloc(uint32_t w, uint32_t h, uint32_t format,
-                         dmabl_type_t type, dmabl_backend_t backend) {
-  dmabl_buf_t *buf;
+texlink_buf_t *texlink_alloc(uint32_t w, uint32_t h, uint32_t format,
+                         texlink_type_t type, texlink_backend_t backend) {
+  texlink_buf_t *buf;
   switch (type) {
-  case DMABL_TYPE_RAW:
-  case DMABL_TYPE_VERTEX_BUFFER:
-  case DMABL_TYPE_COMPUTE_BUFFER:
+  case TEXLINK_TYPE_RAW:
+  case TEXLINK_TYPE_VERTEX_BUFFER:
+  case TEXLINK_TYPE_COMPUTE_BUFFER:
     buf = alloc_linear(w, h, format, type);
     break;
 
-  case DMABL_TYPE_TEXTURE_2D:
-  case DMABL_TYPE_TEXTURE_3D:
-  case DMABL_TYPE_TEXTURE_CUBE:
+  case TEXLINK_TYPE_TEXTURE_2D:
+  case TEXLINK_TYPE_TEXTURE_3D:
+  case TEXLINK_TYPE_TEXTURE_CUBE:
     buf = alloc_gbm(w, h, format, type);
     break;
 
@@ -185,7 +185,7 @@ dmabl_buf_t *dmabl_alloc(uint32_t w, uint32_t h, uint32_t format,
   return buf;
 }
 
-void dmabl_free(dmabl_buf_t *buf) {
+void texlink_free(texlink_buf_t *buf) {
   if (!buf)
     return;
 
@@ -205,11 +205,11 @@ void dmabl_free(dmabl_buf_t *buf) {
   free(buf);
 }
 
-int dmabl_get_dma_fd(dmabl_buf_t *buf) { return buf ? buf->dma_fd : -1; }
+int texlink_get_dma_fd(texlink_buf_t *buf) { return buf ? buf->dma_fd : -1; }
 
-int dmabl_get_sync_fd(dmabl_buf_t *buf) { return buf ? buf->sync_fd : -1; }
+int texlink_get_sync_fd(texlink_buf_t *buf) { return buf ? buf->sync_fd : -1; }
 
-void *dmabl_map_cpu(dmabl_buf_t *buf) {
+void *texlink_map_cpu(texlink_buf_t *buf) {
   if (!buf)
     return NULL;
   if (buf->map_ptr != MAP_FAILED && buf->map_ptr)

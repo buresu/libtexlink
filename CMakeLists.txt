@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(dmabuflink VERSION 0.1.0 LANGUAGES C)
+project(texlink VERSION 0.1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-option(DMABL_BUILD_SHARED_LIBS "Build dmabuflink as a shared library" OFF)
-option(DMABL_BUILD_EXAMPLES "Build example programs" ON)
+option(TEXLINK_BUILD_SHARED_LIBS "Build texlink as a shared library" OFF)
+option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GBM  REQUIRED gbm)
 pkg_check_modules(DRM  REQUIRED libdrm)
 
-add_library(dmabuflink
+add_library(texlink
     src/buffer.c
     src/socket.c
     src/sync.c
@@ -22,13 +22,13 @@ add_library(dmabuflink
 )
 
 if(BUILD_SHARED_LIBS)
-    set_target_properties(dmabuflink PROPERTIES
+    set_target_properties(texlink PROPERTIES
         VERSION   ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
     )
 endif()
 
-target_include_directories(dmabuflink
+target_include_directories(texlink
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<INSTALL_INTERFACE:include>
     PRIVATE src
@@ -36,22 +36,22 @@ target_include_directories(dmabuflink
             ${DRM_INCLUDE_DIRS}
 )
 
-target_link_libraries(dmabuflink
+target_link_libraries(texlink
     PUBLIC ${GBM_LIBRARIES}
            ${DRM_LIBRARIES}
            rt
 )
 
-target_compile_options(dmabuflink PRIVATE
+target_compile_options(texlink PRIVATE
     -Wall -Wextra -Wpedantic
     ${GBM_CFLAGS_OTHER}
     ${DRM_CFLAGS_OTHER}
 )
 
-if(DMABL_BUILD_EXAMPLES)
+if(TEXLINK_BUILD_EXAMPLES)
     foreach(example simple_producer simple_consumer)
         add_executable(${example} examples/${example}.c)
-        target_link_libraries(${example} PRIVATE dmabuflink)
+        target_link_libraries(${example} PRIVATE texlink)
         target_include_directories(${example} PRIVATE include)
         target_compile_options(${example} PRIVATE -Wall -Wextra)
     endforeach()
@@ -65,7 +65,7 @@ if(DMABL_BUILD_EXAMPLES)
         foreach(example egl_tex_producer egl_tex_consumer)
             add_executable(${example} examples/${example}.c)
             target_link_libraries(${example} PRIVATE
-                dmabuflink
+                texlink
                 ${GLFW3_LIBRARIES}
                 ${EGL_LIBRARIES}
                 OpenGL::OpenGL
@@ -92,7 +92,7 @@ if(DMABL_BUILD_EXAMPLES)
         foreach(example vulkan_tex_producer vulkan_tex_consumer)
             add_executable(${example} examples/${example}.c)
             target_link_libraries(${example} PRIVATE
-                    dmabuflink
+                    texlink
                     ${GLFW3_LIBRARIES}
                     Vulkan::Vulkan
                     m
@@ -116,18 +116,18 @@ endif()
 
 include(GNUInstallDirs)
 
-install(TARGETS dmabuflink
-    EXPORT  dmabuflink-targets
+install(TARGETS texlink
+    EXPORT  texlink-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-install(FILES include/dmabuflink.h
+install(FILES include/texlink.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(EXPORT dmabuflink-targets
-    FILE      dmabuflink-config.cmake
-    NAMESPACE dmabuflink::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dmabuflink
+install(EXPORT texlink-targets
+    FILE      texlink-config.cmake
+    NAMESPACE texlink::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/texlink
 )

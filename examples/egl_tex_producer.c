@@ -5,7 +5,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <dmabuflink.h>
+#include <texlink.h>
 #include <drm_fourcc.h>
 
 #include <math.h>
@@ -55,7 +55,7 @@ static float verts[] = {
 
 typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
 
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const dmabl_meta_t *m) {
+static EGLImage import_dma_buf(EGLDisplay dpy, int fd, const texlink_meta_t *m) {
   EGLAttrib attrs[] = {
       EGL_WIDTH,
       (EGLAttrib)m->width,
@@ -97,33 +97,33 @@ int main(void) {
     return 1;
   }
 
-  dmabl_buf_t *bufs[2] = {
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
-                  DMABL_BACKEND_EGL),
-      dmabl_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, DMABL_TYPE_TEXTURE_2D,
-                  DMABL_BACKEND_EGL),
+  texlink_buf_t *bufs[2] = {
+      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
+                  TEXLINK_BACKEND_EGL),
+      texlink_alloc(WIDTH, HEIGHT, DRM_FORMAT_ARGB8888, TEXLINK_TYPE_TEXTURE_2D,
+                  TEXLINK_BACKEND_EGL),
   };
   if (!bufs[0] || !bufs[1]) {
-    fprintf(stderr, "dmabl_alloc failed\n");
+    fprintf(stderr, "texlink_alloc failed\n");
     return 1;
   }
 
   printf("Serving 'texshare', waiting for consumer...\n");
-  dmabl_session_t *session =
-      dmabl_serve_named("texshare", bufs, DMABL_BUFFERING_DOUBLE);
+  texlink_session_t *session =
+      texlink_serve_named("texshare", bufs, TEXLINK_BUFFERING_DOUBLE);
   if (!session) {
-    fprintf(stderr, "dmabl_serve_named failed\n");
+    fprintf(stderr, "texlink_serve_named failed\n");
     return 1;
   }
   printf("Consumer connected. Rendering...\n");
 
   EGLDisplay dpy = eglGetCurrentDisplay();
-  dmabl_meta_t meta = dmabl_session_meta(session);
+  texlink_meta_t meta = texlink_session_meta(session);
 
   EGLImage images[2];
   GLuint textures[2], fbos[2], rbos[2];
   for (int i = 0; i < 2; i++) {
-    images[i] = import_dma_buf(dpy, dmabl_get_dma_fd(bufs[i]), &meta);
+    images[i] = import_dma_buf(dpy, texlink_get_dma_fd(bufs[i]), &meta);
     if (images[i] == EGL_NO_IMAGE) {
       fprintf(stderr, "eglCreateImage failed for buf %d\n", i);
       return 1;
@@ -186,7 +186,7 @@ int main(void) {
 
   double last_frame = glfwGetTime();
   while (!glfwWindowShouldClose(win)) {
-    int idx = dmabl_producer_begin(session);
+    int idx = texlink_producer_begin(session);
     if (idx < 0)
       break;
 
@@ -205,7 +205,7 @@ int main(void) {
     glUseProgram(0);
 
     glFlush();
-    dmabl_producer_end(session, idx);
+    texlink_producer_end(session, idx);
 
     /* Blit shared FBO to window for preview */
     int win_w, win_h;
@@ -220,9 +220,9 @@ int main(void) {
     glfwPollEvents();
   }
 
-  dmabl_session_close(session);
-  dmabl_free(bufs[0]);
-  dmabl_free(bufs[1]);
+  texlink_session_close(session);
+  texlink_free(bufs[0]);
+  texlink_free(bufs[1]);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

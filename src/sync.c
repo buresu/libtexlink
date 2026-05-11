@@ -1,12 +1,12 @@
 #define _GNU_SOURCE
-#include "dmabuflink_internal.h"
+#include "texlink_internal.h"
 
 #include <errno.h>
 #include <linux/dma-buf.h>
 #include <poll.h>
 #include <sys/ioctl.h>
 
-int dmabl_export_sync_file(int dma_fd) {
+int texlink_export_sync_file(int dma_fd) {
   struct dma_buf_export_sync_file req = {
       .flags = DMA_BUF_SYNC_RW,
       .fd = -1,
@@ -16,7 +16,7 @@ int dmabl_export_sync_file(int dma_fd) {
   return req.fd;
 }
 
-int dmabl_wait_sync_file(int sync_fd, int timeout_ms) {
+int texlink_wait_sync_file(int sync_fd, int timeout_ms) {
   if (sync_fd < 0)
     return 0;
 
@@ -33,7 +33,7 @@ int dmabl_wait_sync_file(int sync_fd, int timeout_ms) {
  * CPU cache coherency sync — required on non-coherent systems (ARM, etc.).
  * Must be called around every CPU read/write of a DMA-BUF mapped region.
  */
-int dmabl_cpu_begin(dmabl_buf_t *buf, int write) {
+int texlink_cpu_begin(texlink_buf_t *buf, int write) {
   if (!buf || buf->dma_fd < 0)
     return -1;
 
@@ -44,7 +44,7 @@ int dmabl_cpu_begin(dmabl_buf_t *buf, int write) {
   return ioctl(buf->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
 }
 
-int dmabl_cpu_end(dmabl_buf_t *buf, int write) {
+int texlink_cpu_end(texlink_buf_t *buf, int write) {
   if (!buf || buf->dma_fd < 0)
     return -1;
 
