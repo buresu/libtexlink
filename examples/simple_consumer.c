@@ -44,6 +44,23 @@ int main(int argc, char **argv) {
   texlink_meta_t meta = texlink_client_meta(client);
   printf("Frame: %u bytes  format=0x%x\n", meta.size, meta.format);
 
+  uint32_t frame_count = texlink_client_frame_count(client);
+  texlink_mapping_t mappings[3] = {0};
+  texlink_map_desc_t map_desc = {
+      .version = 1,
+      .flags = TEXLINK_MAP_READ,
+      .offset = 0,
+      .size = 0,
+  };
+  for (uint32_t i = 0; i < frame_count; i++) {
+    texlink_frame_t *frame = texlink_client_frame(client, i);
+    if (texlink_frame_map(frame, &map_desc, &mappings[i]) != 0) {
+      fprintf(stderr, "texlink_frame_map failed\n");
+      texlink_client_destroy(client);
+      return 1;
+    }
+  }
+
   while (1) {
     texlink_frame_t *frame = texlink_client_acquire_frame(client);
     if (!frame) {
@@ -52,10 +69,16 @@ int main(int argc, char **argv) {
     }
 
     texlink_meta_t cur_meta = texlink_client_meta(client);
-    uint64_t *data = texlink_frame_begin_access(frame, TEXLINK_ACCESS_READ);
-    if (data) {
+    texlink_cpu_access_desc_t access_desc = {
+        .version = 1,
+        .access = TEXLINK_CPU_ACCESS_READ,
+        .offset = 0,
+        .size = 0,
+    };
+    if (texlink_frame_cpu_begin(frame, &access_desc) == 0) {
+      uint64_t *data = mappings[texlink_frame_index(frame)].data;
       uint64_t val = data[0];
-      texlink_frame_end_access(frame);
+      texlink_frame_cpu_end(frame, &access_desc);
       printf("frame=%" PRIu64 "  slot=%d  val=%" PRIu64 "\n", cur_meta.frame_id,
              texlink_frame_index(frame), val);
     }
@@ -63,6 +86,8 @@ int main(int argc, char **argv) {
     texlink_client_release_frame(client, frame);
   }
 
+  for (uint32_t i = 0; i < frame_count; i++)
+    texlink_frame_unmap(texlink_client_frame(client, i));
   texlink_client_destroy(client);
   return 0;
 }

@@ -30,9 +30,16 @@ struct texlink_frame {
   int dma_fd;
   int sync_fd;
   int index;
+  void *map_base;
   void *map_ptr;
+  size_t map_size;
+  uint64_t map_length;
+  uint64_t map_offset;
+  uint32_t map_flags;
   size_t size;
   uint32_t active_access;
+  uint64_t active_access_offset;
+  uint64_t active_access_size;
   texlink_meta_t meta;
 
   /* GBM-backed (texture types) — NULL for dma_heap or consumer-side frames */
@@ -137,9 +144,6 @@ int texlink_recv_frame(int sock, texlink_frame_msg_t *msg, int *sync_fd);
 /* sync.c */
 int texlink_export_sync_file(int dma_fd);
 int texlink_wait_sync_file(int sync_fd, int timeout_ms);
-
-/* frame.c */
-void *texlink_frame_map(texlink_frame_t *frame);
 
 /* registry.c */
 void texlink_registry_announce(const char *name, const char *path);

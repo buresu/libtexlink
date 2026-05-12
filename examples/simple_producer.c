@@ -46,6 +46,20 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  texlink_mapping_t mappings[2] = {0};
+  texlink_map_desc_t map_desc = {
+      .version = 1,
+      .flags = TEXLINK_MAP_WRITE,
+      .offset = 0,
+      .size = 0,
+  };
+  for (int i = 0; i < 2; i++) {
+    if (texlink_frame_map(frames[i], &map_desc, &mappings[i]) != 0) {
+      fprintf(stderr, "texlink_frame_map failed\n");
+      return 1;
+    }
+  }
+
   /*
    * texlink_server_start():
    *   1. bind socket at /tmp/texlink/<name>.sock
@@ -75,12 +89,18 @@ int main(int argc, char **argv) {
     if (!frame)
       break;
 
-    uint64_t *data = texlink_frame_begin_access(frame, TEXLINK_ACCESS_WRITE);
-    if (data) {
+    texlink_cpu_access_desc_t access_desc = {
+        .version = 1,
+        .access = TEXLINK_CPU_ACCESS_WRITE,
+        .offset = 0,
+        .size = 0,
+    };
+    if (texlink_frame_cpu_begin(frame, &access_desc) == 0) {
+      uint64_t *data = mappings[texlink_frame_index(frame)].data;
       counter++;
       data[0] = counter;
       memset(data + 1, (int)(counter & 0xff), BUF_SIZE - sizeof(uint64_t));
-      texlink_frame_end_access(frame);
+      texlink_frame_cpu_end(frame, &access_desc);
     }
 
     texlink_server_end_frame(server, frame);
@@ -89,6 +109,8 @@ int main(int argc, char **argv) {
   }
 
   texlink_server_destroy(server); /* also unregisters from registry */
+  texlink_frame_unmap(frames[0]);
+  texlink_frame_unmap(frames[1]);
   texlink_frame_destroy(frames[0]);
   texlink_frame_destroy(frames[1]);
   return 0;

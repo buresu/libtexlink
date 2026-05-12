@@ -47,8 +47,8 @@ static void session_free_consumer_frames(texlink_session_t *s) {
     texlink_frame_t *frame = s->frames[i];
     if (!frame)
       continue;
-    if (frame->map_ptr != MAP_FAILED && frame->map_ptr)
-      munmap(frame->map_ptr, frame->size);
+    if (frame->map_base != MAP_FAILED && frame->map_base)
+      munmap(frame->map_base, frame->map_size);
     if (frame->sync_fd >= 0)
       close(frame->sync_fd);
     if (frame->dma_fd >= 0)
@@ -90,6 +90,7 @@ static texlink_session_t *session_connect(const char *path) {
     frame->dma_fd = -1;
     frame->sync_fd = -1;
     frame->index = i;
+    frame->map_base = MAP_FAILED;
     frame->map_ptr = MAP_FAILED;
     frame->drm_fd = -1;
     frame->meta = hs.meta;

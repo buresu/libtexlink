@@ -37,11 +37,6 @@ typedef enum {
 } texlink_frame_format_t;
 
 typedef enum {
-  TEXLINK_ACCESS_READ = 1u << 0,
-  TEXLINK_ACCESS_WRITE = 1u << 1,
-} texlink_access_t;
-
-typedef enum {
   TEXLINK_STATE_CLOSED = 0,
   TEXLINK_STATE_CREATED,
   TEXLINK_STATE_LISTENING,
@@ -76,9 +71,40 @@ typedef struct {
   uint32_t height;
   uint32_t depth;
   uint32_t format;
+  uint32_t stride;
   uint64_t size;
   uint32_t flags;
 } texlink_frame_desc_t;
+
+typedef enum {
+  TEXLINK_MAP_READ = 1u << 0,
+  TEXLINK_MAP_WRITE = 1u << 1,
+} texlink_map_flags_t;
+
+typedef struct {
+  uint32_t version;
+  uint32_t flags;
+  uint64_t offset;
+  uint64_t size;
+} texlink_map_desc_t;
+
+typedef struct {
+  void *data;
+  uint64_t size;
+  uint32_t stride;
+} texlink_mapping_t;
+
+typedef enum {
+  TEXLINK_CPU_ACCESS_READ = 1u << 0,
+  TEXLINK_CPU_ACCESS_WRITE = 1u << 1,
+} texlink_cpu_access_t;
+
+typedef struct {
+  uint32_t version;
+  uint32_t access;
+  uint64_t offset;
+  uint64_t size;
+} texlink_cpu_access_desc_t;
 
 typedef struct {
   uint32_t version;
@@ -137,12 +163,15 @@ int texlink_frame_index(texlink_frame_t *frame);
 int texlink_frame_get_dma_fd(texlink_frame_t *frame);
 int texlink_frame_get_sync_fd(texlink_frame_t *frame);
 
-/*
- * Host access to a DMA-BUF-backed frame. The implementation maps the frame
- * and performs any required CPU cache coherency synchronization.
- */
-void *texlink_frame_begin_access(texlink_frame_t *frame, uint32_t access);
-int texlink_frame_end_access(texlink_frame_t *frame);
+int texlink_frame_map(texlink_frame_t *frame, const texlink_map_desc_t *desc,
+                      texlink_mapping_t *out_mapping);
+int texlink_frame_unmap(texlink_frame_t *frame);
+int texlink_frame_is_mapped(texlink_frame_t *frame);
+
+int texlink_frame_cpu_begin(texlink_frame_t *frame,
+                            const texlink_cpu_access_desc_t *desc);
+int texlink_frame_cpu_end(texlink_frame_t *frame,
+                          const texlink_cpu_access_desc_t *desc);
 
 /* Name-based discovery (Spout-style registry) */
 #define TEXLINK_NAME_MAX 64

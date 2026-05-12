@@ -15,6 +15,27 @@
 static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
                                   texlink_frame_type_t type);
 
+static uint32_t format_bytes_per_pixel(uint32_t format) {
+  switch (format) {
+  case TEXLINK_FRAME_FORMAT_R8:
+    return 1;
+  case TEXLINK_FRAME_FORMAT_ARGB8888:
+  case TEXLINK_FRAME_FORMAT_XRGB8888:
+  case TEXLINK_FRAME_FORMAT_ABGR8888:
+  case TEXLINK_FRAME_FORMAT_XBGR8888:
+    return 4;
+  default:
+    return 0;
+  }
+}
+
+static uint32_t infer_stride(uint32_t width, uint32_t format) {
+  uint32_t bpp = format_bytes_per_pixel(format);
+  if (width == 0 || bpp == 0)
+    return 0;
+  return width * bpp;
+}
+
 static int open_drm_render_node(void) {
   char path[32];
   for (int i = 128; i < 140; i++) {
@@ -53,7 +74,7 @@ static int alloc_dma_heap(size_t size) {
 }
 
 static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
-                                     uint32_t format,
+                                     uint32_t stride, uint32_t format,
                                      texlink_frame_type_t type) {
   int dma_fd = alloc_dma_heap(sz);
 
@@ -67,6 +88,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
     frame->dma_fd = dma_fd;
     frame->sync_fd = -1;
     frame->index = -1;
+    frame->map_base = MAP_FAILED;
     frame->map_ptr = MAP_FAILED;
     frame->drm_fd = -1;
     frame->size = sz;
@@ -75,7 +97,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
     frame->meta.height = h;
     frame->meta.depth = 1;
     frame->meta.format = format;
-    frame->meta.stride = w;
+    frame->meta.stride = stride ? stride : infer_stride(w, format);
     frame->meta.size = (uint32_t)sz;
     return frame;
   }
@@ -97,6 +119,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
   frame->meta.width = w;
   frame->meta.height = h;
   frame->meta.format = format;
+  frame->meta.stride = stride ? stride : infer_stride(w, format);
   frame->meta.size = (uint32_t)sz; /* logical size; frame->size is physical */
   return frame;
 }
@@ -110,6 +133,7 @@ static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   frame->dma_fd = -1;
   frame->sync_fd = -1;
   frame->index = -1;
+  frame->map_base = MAP_FAILED;
   frame->map_ptr = MAP_FAILED;
 
   frame->drm_fd = open_drm_render_node();
@@ -169,7 +193,11 @@ texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc) {
     return NULL;
 
   uint32_t h = desc->height ? desc->height : 1;
-  size_t size = desc->size ? (size_t)desc->size : (size_t)desc->width * h;
+  uint32_t stride = desc->stride ? desc->stride
+                                 : infer_stride(desc->width, desc->format);
+  size_t size = desc->size ? (size_t)desc->size : (size_t)stride * h;
+  if (size == 0)
+    size = (size_t)desc->width * h;
 
   switch (desc->type) {
   case TEXLINK_FRAME_TYPE_RAW:
@@ -178,7 +206,7 @@ texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc) {
     if (size == 0)
       return NULL;
     return alloc_linear(size, desc->width ? desc->width : (uint32_t)size, h,
-                        desc->format, desc->type);
+                        stride, desc->format, desc->type);
 
   case TEXLINK_FRAME_TYPE_TEXTURE_2D:
   case TEXLINK_FRAME_TYPE_TEXTURE_3D:
@@ -196,8 +224,8 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
   if (!frame)
     return;
 
-  if (frame->map_ptr != MAP_FAILED && frame->map_ptr)
-    munmap(frame->map_ptr, frame->size);
+  if (frame->map_base != MAP_FAILED && frame->map_base)
+    munmap(frame->map_base, frame->map_size);
   if (frame->sync_fd >= 0)
     close(frame->sync_fd);
   if (frame->dma_fd >= 0)
@@ -230,19 +258,4 @@ int texlink_frame_get_dma_fd(texlink_frame_t *frame) {
 
 int texlink_frame_get_sync_fd(texlink_frame_t *frame) {
   return frame ? frame->sync_fd : -1;
-}
-
-void *texlink_frame_map(texlink_frame_t *frame) {
-  if (!frame)
-    return NULL;
-  if (frame->map_ptr != MAP_FAILED && frame->map_ptr)
-    return frame->map_ptr;
-
-  frame->map_ptr = mmap(NULL, frame->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                        frame->dma_fd, 0);
-  if (frame->map_ptr == MAP_FAILED) {
-    frame->map_ptr = NULL;
-    return NULL;
-  }
-  return frame->map_ptr;
 }
