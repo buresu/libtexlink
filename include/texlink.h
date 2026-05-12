@@ -77,6 +77,41 @@ typedef struct {
 } texlink_frame_desc_t;
 
 typedef enum {
+  TEXLINK_NATIVE_HANDLE_UNKNOWN = 0,
+
+  TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+  TEXLINK_NATIVE_HANDLE_SYNC_FD,
+  TEXLINK_NATIVE_HANDLE_OPAQUE_FD,
+
+  TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE,
+  TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE,
+  TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
+  TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+
+  TEXLINK_NATIVE_HANDLE_IOSURFACE,
+} texlink_native_handle_type_t;
+
+typedef enum {
+  TEXLINK_NATIVE_HANDLE_FLAG_NONE = 0,
+  TEXLINK_NATIVE_HANDLE_FLAG_BORROWED = 1u << 0,
+  TEXLINK_NATIVE_HANDLE_FLAG_OWNED = 1u << 1,
+  TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED = 1u << 2,
+} texlink_native_handle_flags_t;
+
+typedef struct {
+  uint32_t version;
+
+  texlink_native_handle_type_t type;
+  uint32_t flags;
+
+  union {
+    int fd;
+    void *ptr;
+    uint64_t u64;
+  } value;
+} texlink_native_handle_t;
+
+typedef enum {
   TEXLINK_MAP_READ = 1u << 0,
   TEXLINK_MAP_WRITE = 1u << 1,
 } texlink_map_flags_t;
@@ -159,9 +194,13 @@ void texlink_frame_destroy(texlink_frame_t *frame);
 texlink_meta_t texlink_frame_meta(texlink_frame_t *frame);
 int texlink_frame_index(texlink_frame_t *frame);
 
-/* Native handle accessors */
-int texlink_frame_get_dma_fd(texlink_frame_t *frame);
-int texlink_frame_get_sync_fd(texlink_frame_t *frame);
+int texlink_frame_get_native_handle(texlink_frame_t *frame,
+                                    texlink_native_handle_type_t type,
+                                    texlink_native_handle_t *out_handle);
+int texlink_frame_dup_native_handle(texlink_frame_t *frame,
+                                    texlink_native_handle_type_t type,
+                                    texlink_native_handle_t *out_handle);
+int texlink_native_handle_close(texlink_native_handle_t *handle);
 
 int texlink_frame_map(texlink_frame_t *frame, const texlink_map_desc_t *desc,
                       texlink_mapping_t *out_mapping);

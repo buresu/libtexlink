@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #define WIDTH 512
 #define HEIGHT 512
@@ -238,14 +237,20 @@ static void create_swapchain(VulkanContext *ctx) {
 
 /*
  * Import a GBM-backed DMA-BUF fd into Vulkan as a LINEAR image.
- * We dup() the fd because Vulkan may consume (close) it on import.
- * The original frame->dma_fd remains valid for texlink to send to consumers.
+ * Vulkan may consume the imported fd, so request an owned duplicate from
+ * texlink and keep the original frame handle valid for consumers.
  * TRANSFER_DST: for clear  TRANSFER_SRC: for preview blit to swapchain.
  */
 static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
                                texlink_frame_t *frame, uint32_t width,
                                uint32_t height) {
   img->frame = frame;
+  texlink_native_handle_t handle;
+  if (texlink_frame_dup_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+                                      &handle) != 0) {
+    fprintf(stderr, "texlink_frame_dup_native_handle failed\n");
+    exit(1);
+  }
 
   VkExternalMemoryImageCreateInfo ext_img = {
       .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
@@ -280,7 +285,7 @@ static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = dup(texlink_frame_get_dma_fd(frame)),
+      .fd = handle.value.fd,
   };
   VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,

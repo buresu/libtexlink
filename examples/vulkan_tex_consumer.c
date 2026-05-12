@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #define WIDTH 512
 #define HEIGHT 512
@@ -38,7 +37,6 @@ typedef struct {
 typedef struct {
   VkImage image;
   VkDeviceMemory memory;
-  int dma_fd;
   VkImageLayout current_layout;
 } ImportedImage;
 
@@ -227,11 +225,19 @@ static void create_swapchain(VulkanContext *ctx) {
 
 /*
  * Import a DMA-BUF fd into Vulkan as a LINEAR image for use as blit source.
- * We dup() the fd: texlink retains the original, Vulkan may consume the dup.
+ * Vulkan may consume the imported fd, so request an owned duplicate from
+ * texlink and keep the original frame handle valid for later use.
  */
 static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
-                                 int dma_fd, const texlink_meta_t *meta) {
-  img->dma_fd = dma_fd;
+                                 texlink_frame_t *frame,
+                                 const texlink_meta_t *meta) {
+  texlink_native_handle_t handle;
+  if (texlink_frame_dup_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+                                      &handle) != 0) {
+    fprintf(stderr, "texlink_frame_dup_native_handle failed\n");
+    exit(1);
+  }
+
   img->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
   VkExternalMemoryImageCreateInfo ext_img = {
@@ -266,7 +272,7 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &dedicated,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = dup(dma_fd),
+      .fd = handle.value.fd,
   };
   VkMemoryAllocateInfo mai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -470,8 +476,7 @@ int main(void) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     if (!frame)
       break;
-    import_dma_buf_image(&vk, &images[i], texlink_frame_get_dma_fd(frame),
-                         &meta);
+    import_dma_buf_image(&vk, &images[i], frame, &meta);
   }
 
   while (!glfwWindowShouldClose(window)) {

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "texlink_internal.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <gbm.h>
 #include <linux/dma-heap.h>
@@ -252,10 +253,94 @@ int texlink_frame_index(texlink_frame_t *frame) {
   return frame ? frame->index : -1;
 }
 
-int texlink_frame_get_dma_fd(texlink_frame_t *frame) {
-  return frame ? frame->dma_fd : -1;
+static int frame_fd_for_handle(texlink_frame_t *frame,
+                               texlink_native_handle_type_t type) {
+  switch (type) {
+  case TEXLINK_NATIVE_HANDLE_DMA_BUF_FD:
+    return frame->dma_fd;
+  case TEXLINK_NATIVE_HANDLE_SYNC_FD:
+    return frame->sync_fd;
+  default:
+    return -1;
+  }
 }
 
-int texlink_frame_get_sync_fd(texlink_frame_t *frame) {
-  return frame ? frame->sync_fd : -1;
+static int is_posix_fd_handle(texlink_native_handle_type_t type) {
+  switch (type) {
+  case TEXLINK_NATIVE_HANDLE_DMA_BUF_FD:
+  case TEXLINK_NATIVE_HANDLE_SYNC_FD:
+  case TEXLINK_NATIVE_HANDLE_OPAQUE_FD:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+int texlink_frame_get_native_handle(texlink_frame_t *frame,
+                                    texlink_native_handle_type_t type,
+                                    texlink_native_handle_t *out_handle) {
+  if (!frame || !out_handle)
+    return -EINVAL;
+  if (type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
+    return -EINVAL;
+  if (type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD &&
+      type != TEXLINK_NATIVE_HANDLE_SYNC_FD)
+    return -ENOTSUP;
+
+  int fd = frame_fd_for_handle(frame, type);
+  if (fd < 0)
+    return -ENOENT;
+
+  memset(out_handle, 0, sizeof(*out_handle));
+  out_handle->version = 1;
+  out_handle->type = type;
+  out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  out_handle->value.fd = fd;
+  return 0;
+}
+
+int texlink_frame_dup_native_handle(texlink_frame_t *frame,
+                                    texlink_native_handle_type_t type,
+                                    texlink_native_handle_t *out_handle) {
+  texlink_native_handle_t borrowed;
+  int ret = texlink_frame_get_native_handle(frame, type, &borrowed);
+  if (ret != 0)
+    return ret;
+  if (!is_posix_fd_handle(type))
+    return -ENOTSUP;
+
+  int fd = dup(borrowed.value.fd);
+  if (fd < 0)
+    return -errno;
+
+  memset(out_handle, 0, sizeof(*out_handle));
+  out_handle->version = 1;
+  out_handle->type = type;
+  out_handle->flags =
+      TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
+  out_handle->value.fd = fd;
+  return 0;
+}
+
+int texlink_native_handle_close(texlink_native_handle_t *handle) {
+  if (!handle)
+    return -EINVAL;
+  if (!(handle->flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED))
+    return -EPERM;
+
+  int ret = 0;
+  if (is_posix_fd_handle(handle->type)) {
+    if (handle->value.fd < 0)
+      return -EINVAL;
+    ret = close(handle->value.fd);
+  } else {
+    return -ENOTSUP;
+  }
+
+  if (ret < 0)
+    return -errno;
+
+  memset(handle, 0, sizeof(*handle));
+  handle->value.fd = -1;
+  return 0;
 }

@@ -108,7 +108,15 @@ int main(void) {
     if (!frame)
       break;
 
-    images[i] = import_dma_buf(dpy, texlink_frame_get_dma_fd(frame), &meta);
+    texlink_native_handle_t handle;
+    if (texlink_frame_get_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+                                        &handle) != 0) {
+      fprintf(stderr, "texlink_frame_get_native_handle failed for frame %u\n",
+              i);
+      return 1;
+    }
+
+    images[i] = import_dma_buf(dpy, handle.value.fd, &meta);
     if (images[i] == EGL_NO_IMAGE) {
       fprintf(stderr, "eglCreateImage failed for frame %u\n", i);
       return 1;
