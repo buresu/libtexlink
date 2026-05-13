@@ -42,6 +42,49 @@ static texlink_session_t *session_alloc(void) {
   return s;
 }
 
+static int is_posix_fd_handle(texlink_native_handle_type_t type) {
+  switch (type) {
+  case TEXLINK_NATIVE_HANDLE_DMA_BUF_FD:
+  case TEXLINK_NATIVE_HANDLE_SYNC_FD:
+  case TEXLINK_NATIVE_HANDLE_OPAQUE_FD:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+static texlink_native_handle_type_t frame_handle_type_from_meta(
+    const texlink_meta_t *meta) {
+  texlink_native_handle_type_t type =
+      meta ? (texlink_native_handle_type_t)meta->handle_type
+           : TEXLINK_NATIVE_HANDLE_UNKNOWN;
+  return type == TEXLINK_NATIVE_HANDLE_UNKNOWN ? TEXLINK_NATIVE_HANDLE_DMA_BUF_FD
+                                               : type;
+}
+
+static void frame_set_received_fd(texlink_frame_t *frame,
+                                  texlink_native_handle_type_t type, int fd) {
+  frame->handle.version = 1;
+  frame->handle.type = type;
+  frame->handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+  frame->handle.value.fd = fd;
+  frame->meta.handle_type = (uint32_t)type;
+  frame->dma_fd = (type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) ? fd : -1;
+}
+
+static void frame_close_owned_handle(texlink_frame_t *frame) {
+  if (!frame)
+    return;
+  if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+      is_posix_fd_handle(frame->handle.type) && frame->handle.value.fd >= 0) {
+    close(frame->handle.value.fd);
+    frame->handle.value.fd = -1;
+  } else if (frame->dma_fd >= 0) {
+    close(frame->dma_fd);
+  }
+  frame->dma_fd = -1;
+}
+
 static void session_free_consumer_frames(texlink_session_t *s) {
   for (int i = 0; i < s->buf_count; i++) {
     texlink_frame_t *frame = s->frames[i];
@@ -51,8 +94,7 @@ static void session_free_consumer_frames(texlink_session_t *s) {
       munmap(frame->map_base, frame->map_size);
     if (frame->sync_fd >= 0)
       close(frame->sync_fd);
-    if (frame->dma_fd >= 0)
-      close(frame->dma_fd);
+    frame_close_owned_handle(frame);
     free(frame);
     s->frames[i] = NULL;
   }
@@ -82,7 +124,12 @@ static texlink_session_t *session_connect(const char *path) {
   s->buffering = hs.buffering;
   strncpy(s->shm_name, hs.shm_name, sizeof(s->shm_name) - 1);
 
-  /* Receive dma_fds */
+  texlink_native_handle_type_t handle_type =
+      frame_handle_type_from_meta(&hs.meta);
+  if (!is_posix_fd_handle(handle_type))
+    goto err;
+
+  /* Receive native fd handles */
   for (int i = 0; i < s->buf_count; i++) {
     texlink_frame_t *frame = calloc(1, sizeof(*frame));
     if (!frame)
@@ -97,8 +144,10 @@ static texlink_session_t *session_connect(const char *path) {
     frame->size = hs.meta.size;
     s->frames[i] = frame;
 
-    if (texlink_recv_fds(sock_fd, &frame->dma_fd, 1) < 0)
+    int fd = -1;
+    if (texlink_recv_fds(sock_fd, &fd, 1) < 0)
       goto err;
+    frame_set_received_fd(frame, handle_type, fd);
   }
 
   /* Open shared memory created by producer */
@@ -314,6 +363,8 @@ int texlink_server_start(texlink_server_t *server) {
   server->shm->buf_count = server->frame_count;
   server->shm->meta = server->frames[0]->meta;
   server->shm->meta.backend = (uint32_t)server->backend;
+  if (server->shm->meta.handle_type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
+    server->shm->meta.handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD;
 
   if (server->name[0] != '\0') {
     texlink_registry_announce(server->name, server->path);
@@ -369,7 +420,13 @@ int texlink_server_poll(texlink_server_t *server) {
 
     int ok = 1;
     for (uint32_t i = 0; i < server->frame_count; i++) {
-      if (texlink_send_fds(client_fd, &server->frames[i]->dma_fd, 1) < 0) {
+      texlink_native_handle_t handle;
+      texlink_native_handle_type_t handle_type =
+          frame_handle_type_from_meta(&server->frames[i]->meta);
+      if (texlink_frame_get_native_handle(server->frames[i], handle_type,
+                                          &handle) != 0 ||
+          !is_posix_fd_handle(handle.type) ||
+          texlink_send_fds(client_fd, &handle.value.fd, 1) < 0) {
         ok = 0;
         break;
       }
@@ -427,7 +484,9 @@ int texlink_server_end_frame(texlink_server_t *server, texlink_frame_t *frame) {
   if (!server || !server->shm || server->shm == MAP_FAILED || idx < 0)
     return -1;
 
-  int sync_fd = texlink_export_sync_file(server->frames[idx]->dma_fd);
+  int sync_fd = -1;
+  if (server->frames[idx]->dma_fd >= 0)
+    sync_fd = texlink_export_sync_file(server->frames[idx]->dma_fd);
   if (server->frames[idx]->sync_fd >= 0)
     close(server->frames[idx]->sync_fd);
   server->frames[idx]->sync_fd = sync_fd;

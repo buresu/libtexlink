@@ -48,6 +48,7 @@ typedef enum {
 
 typedef struct {
   uint32_t backend;
+  uint32_t handle_type;
   uint32_t type;
   uint32_t width;
   uint32_t height;

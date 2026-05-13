@@ -16,6 +16,21 @@
 static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
                                   texlink_frame_type_t type);
 
+static int is_posix_fd_handle(texlink_native_handle_type_t type);
+
+static void frame_set_fd_handle(texlink_frame_t *frame,
+                                texlink_native_handle_type_t type, int fd,
+                                uint32_t flags) {
+  if (!frame)
+    return;
+  frame->handle.version = 1;
+  frame->handle.type = type;
+  frame->handle.flags = flags;
+  frame->handle.value.fd = fd;
+  frame->meta.handle_type = (uint32_t)type;
+  frame->dma_fd = (type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) ? fd : -1;
+}
+
 static uint32_t format_bytes_per_pixel(uint32_t format) {
   switch (format) {
   case TEXLINK_FRAME_FORMAT_R8:
@@ -94,6 +109,8 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
     frame->drm_fd = -1;
     frame->size = sz;
     frame->meta.type = type;
+    frame_set_fd_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD, dma_fd,
+                        TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
     frame->meta.width = w;
     frame->meta.height = h;
     frame->meta.depth = 1;
@@ -175,6 +192,8 @@ static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   }
 
   uint32_t stride = gbm_bo_get_stride(frame->bo);
+  frame_set_fd_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD, frame->dma_fd,
+                      TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
   frame->size = (size_t)stride * real_h;
   frame->meta.type = type;
   frame->meta.width = w;
@@ -225,7 +244,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
     const texlink_frame_native_desc_t *desc) {
   if (!desc)
     return NULL;
-  if (desc->handle.type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD)
+  if (!is_posix_fd_handle(desc->handle.type))
     return NULL;
   if (desc->handle.value.fd < 0)
     return NULL;
@@ -251,7 +270,8 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
     return NULL;
   }
 
-  frame->dma_fd = fd;
+  frame_set_fd_handle(frame, desc->handle.type, fd,
+                      TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
   frame->sync_fd = -1;
   frame->index = -1;
   frame->map_base = MAP_FAILED;
@@ -278,7 +298,10 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
     munmap(frame->map_base, frame->map_size);
   if (frame->sync_fd >= 0)
     close(frame->sync_fd);
-  if (frame->dma_fd >= 0)
+  if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+      is_posix_fd_handle(frame->handle.type) && frame->handle.value.fd >= 0)
+    close(frame->handle.value.fd);
+  else if (frame->dma_fd >= 0)
     close(frame->dma_fd);
   if (frame->bo)
     gbm_bo_destroy(frame->bo);
@@ -320,10 +343,14 @@ static int frame_fd_for_handle(texlink_frame_t *frame,
                                texlink_native_handle_type_t type) {
   switch (type) {
   case TEXLINK_NATIVE_HANDLE_DMA_BUF_FD:
+    if (frame->handle.type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD)
+      return frame->handle.value.fd;
     return frame->dma_fd;
   case TEXLINK_NATIVE_HANDLE_SYNC_FD:
     return frame->sync_fd;
   default:
+    if (frame->handle.type == type && is_posix_fd_handle(type))
+      return frame->handle.value.fd;
     return -1;
   }
 }
@@ -346,8 +373,7 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
     return -EINVAL;
   if (type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
     return -EINVAL;
-  if (type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD &&
-      type != TEXLINK_NATIVE_HANDLE_SYNC_FD)
+  if (type != TEXLINK_NATIVE_HANDLE_SYNC_FD && type != frame->handle.type)
     return -ENOTSUP;
 
   int fd = frame_fd_for_handle(frame, type);

@@ -27,6 +27,7 @@ typedef enum {
 typedef struct texlink_session texlink_session_t;
 
 struct texlink_frame {
+  texlink_native_handle_t handle;
   int dma_fd;
   int sync_fd;
   int index;
@@ -54,7 +55,7 @@ typedef struct {
   _Atomic uint32_t current_idx;
   uint32_t buf_count;
   texlink_meta_t meta;
-  uint8_t _pad[48]; /* pad to 128 bytes */
+  uint8_t _pad[56]; /* pad to 128 bytes */
 } texlink_shm_t;
 
 /* Handshake sent over socket at connect time */
