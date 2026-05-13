@@ -5,7 +5,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <texlink.h>
+#include <texlink_egl.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -52,33 +52,6 @@ static float verts[] = {
     0.5f,  -0.288675f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
 };
 
-typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
-
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd,
-                               const texlink_meta_t *m) {
-  EGLAttrib attrs[] = {
-      EGL_WIDTH,
-      (EGLAttrib)m->width,
-      EGL_HEIGHT,
-      (EGLAttrib)m->height,
-      EGL_LINUX_DRM_FOURCC_EXT,
-      (EGLAttrib)m->format,
-      EGL_DMA_BUF_PLANE0_FD_EXT,
-      (EGLAttrib)fd,
-      EGL_DMA_BUF_PLANE0_OFFSET_EXT,
-      0,
-      EGL_DMA_BUF_PLANE0_PITCH_EXT,
-      (EGLAttrib)m->stride,
-      EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-      (EGLAttrib)(m->modifier & 0xFFFFFFFFu),
-      EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-      (EGLAttrib)(m->modifier >> 32),
-      EGL_NONE,
-  };
-  return eglCreateImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL,
-                        attrs);
-}
-
 int main(void) {
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
@@ -90,31 +63,29 @@ int main(void) {
   glfwMakeContextCurrent(win);
   glewInit();
 
-  TargetTex2D_fn glEGLImageTargetTexture2DOES =
-      (TargetTex2D_fn)eglGetProcAddress("glEGLImageTargetTexture2DOES");
-  if (!glEGLImageTargetTexture2DOES) {
-    fprintf(stderr, "GL_OES_EGL_image not supported\n");
-    return 1;
-  }
-
-  texlink_frame_t *frames[2] = {
-      texlink_frame_create(&(texlink_frame_desc_t){
+  EGLDisplay dpy = eglGetCurrentDisplay();
+  texlink_egl_texture_frame_t *texture_frames[2] = {
+      texlink_egl_texture_frame_create(&(texlink_egl_texture_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .display = dpy,
           .width = WIDTH,
           .height = HEIGHT,
           .format = TEXLINK_FRAME_FORMAT_ARGB8888,
       }),
-      texlink_frame_create(&(texlink_frame_desc_t){
+      texlink_egl_texture_frame_create(&(texlink_egl_texture_frame_desc_t){
           .version = 1,
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .display = dpy,
           .width = WIDTH,
           .height = HEIGHT,
           .format = TEXLINK_FRAME_FORMAT_ARGB8888,
       }),
   };
+  texlink_frame_t *frames[2] = {
+      texlink_egl_texture_frame_frame(texture_frames[0]),
+      texlink_egl_texture_frame_frame(texture_frames[1]),
+  };
   if (!frames[0] || !frames[1]) {
-    fprintf(stderr, "texlink_frame_create failed\n");
+    fprintf(stderr, "texlink_egl_texture_frame_create failed\n");
     return 1;
   }
 
@@ -133,31 +104,10 @@ int main(void) {
   }
   printf("Rendering...\n");
 
-  EGLDisplay dpy = eglGetCurrentDisplay();
-  texlink_meta_t meta = texlink_frame_meta(frames[0]);
-
-  EGLImage images[2];
   GLuint textures[2], fbos[2], rbos[2];
   for (int i = 0; i < 2; i++) {
-    texlink_native_handle_t handle;
-    if (texlink_frame_get_native_handle(
-            frames[i], TEXLINK_NATIVE_HANDLE_DMA_BUF_FD, &handle) != 0) {
-      fprintf(stderr, "texlink_frame_get_native_handle failed for frame %d\n",
-              i);
-      return 1;
-    }
-
-    images[i] = import_dma_buf(dpy, handle.value.fd, &meta);
-    if (images[i] == EGL_NO_IMAGE) {
-      fprintf(stderr, "eglCreateImage failed for frame %d\n", i);
-      return 1;
-    }
-
-    glGenTextures(1, &textures[i]);
+    textures[i] = texlink_egl_texture_frame_texture(texture_frames[i]);
     glBindTexture(GL_TEXTURE_2D, textures[i]);
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, images[i]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glGenFramebuffers(1, &fbos[i]);
     glBindFramebuffer(GL_FRAMEBUFFER, fbos[i]);
@@ -248,8 +198,8 @@ int main(void) {
   }
 
   texlink_server_destroy(server);
-  texlink_frame_destroy(frames[0]);
-  texlink_frame_destroy(frames[1]);
+  texlink_egl_texture_frame_destroy(texture_frames[0]);
+  texlink_egl_texture_frame_destroy(texture_frames[1]);
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

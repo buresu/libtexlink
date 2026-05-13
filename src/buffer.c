@@ -194,8 +194,8 @@ texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc) {
     return NULL;
 
   uint32_t h = desc->height ? desc->height : 1;
-  uint32_t stride = desc->stride ? desc->stride
-                                 : infer_stride(desc->width, desc->format);
+  uint32_t stride =
+      desc->stride ? desc->stride : infer_stride(desc->width, desc->format);
   size_t size = desc->size ? (size_t)desc->size : (size_t)stride * h;
   if (size == 0)
     size = (size_t)desc->width * h;
@@ -221,6 +221,55 @@ texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc) {
   }
 }
 
+texlink_frame_t *texlink_frame_create_from_native_handle(
+    const texlink_frame_native_desc_t *desc) {
+  if (!desc)
+    return NULL;
+  if (desc->handle.type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD)
+    return NULL;
+  if (desc->handle.value.fd < 0)
+    return NULL;
+  if (desc->size > UINT32_MAX)
+    return NULL;
+
+  uint64_t size = desc->size;
+  if (size == 0 && desc->stride != 0 && desc->height != 0)
+    size = (uint64_t)desc->stride * desc->height;
+  if (size > UINT32_MAX)
+    return NULL;
+
+  int fd = desc->handle.value.fd;
+  if (!(desc->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED)) {
+    fd = dup(desc->handle.value.fd);
+    if (fd < 0)
+      return NULL;
+  }
+
+  texlink_frame_t *frame = calloc(1, sizeof(*frame));
+  if (!frame) {
+    close(fd);
+    return NULL;
+  }
+
+  frame->dma_fd = fd;
+  frame->sync_fd = -1;
+  frame->index = -1;
+  frame->map_base = MAP_FAILED;
+  frame->map_ptr = MAP_FAILED;
+  frame->drm_fd = -1;
+  frame->size = (size_t)size;
+  frame->meta.backend = (uint32_t)desc->backend;
+  frame->meta.type = desc->type;
+  frame->meta.width = desc->width;
+  frame->meta.height = desc->height;
+  frame->meta.depth = desc->depth ? desc->depth : 1;
+  frame->meta.format = desc->format;
+  frame->meta.stride = desc->stride;
+  frame->meta.modifier = desc->modifier;
+  frame->meta.size = (uint32_t)size;
+  return frame;
+}
+
 void texlink_frame_destroy(texlink_frame_t *frame) {
   if (!frame)
     return;
@@ -239,6 +288,20 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
     close(frame->drm_fd);
 
   free(frame);
+}
+
+int texlink_should_flip_y(texlink_backend_t producer,
+                          texlink_backend_t consumer) {
+  if (producer == TEXLINK_BACKEND_UNKNOWN ||
+      consumer == TEXLINK_BACKEND_UNKNOWN)
+    return 0;
+  if (producer == consumer)
+    return 0;
+  if (producer == TEXLINK_BACKEND_EGL && consumer == TEXLINK_BACKEND_VULKAN)
+    return 1;
+  if (producer == TEXLINK_BACKEND_VULKAN && consumer == TEXLINK_BACKEND_EGL)
+    return 1;
+  return 0;
 }
 
 texlink_meta_t texlink_frame_meta(texlink_frame_t *frame) {

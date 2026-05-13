@@ -4,7 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <texlink.h>
+#include <texlink_vulkan.h>
 
 #include <math.h>
 #include <stdio.h>
@@ -49,9 +49,7 @@ typedef struct {
 } VulkanContext;
 
 typedef struct {
-  texlink_frame_t *frame;
-  VkImage image;
-  VkDeviceMemory memory;
+  texlink_vk_image_t *image;
 } SharedImage;
 
 static void vk_check(VkResult r, const char *msg) {
@@ -59,16 +57,6 @@ static void vk_check(VkResult r, const char *msg) {
     fprintf(stderr, "%s failed (%d)\n", msg, r);
     exit(1);
   }
-}
-
-static uint32_t find_memory_type(VulkanContext *ctx, uint32_t type_bits,
-                                 VkMemoryPropertyFlags flags) {
-  for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; i++) {
-    if ((type_bits & (1u << i)) &&
-        (ctx->mem_props.memoryTypes[i].propertyFlags & flags) == flags)
-      return i;
-  }
-  return UINT32_MAX;
 }
 
 static void create_instance(VulkanContext *ctx) {
@@ -235,74 +223,6 @@ static void create_swapchain(VulkanContext *ctx) {
                           ctx->sc_images);
 }
 
-/*
- * Import a GBM-backed DMA-BUF fd into Vulkan as a LINEAR image.
- * Vulkan may consume the imported fd, so request an owned duplicate from
- * texlink and keep the original frame handle valid for consumers.
- * TRANSFER_DST: for clear  TRANSFER_SRC: for preview blit to swapchain.
- */
-static void setup_shared_image(VulkanContext *ctx, SharedImage *img,
-                               texlink_frame_t *frame, uint32_t width,
-                               uint32_t height) {
-  img->frame = frame;
-  texlink_native_handle_t handle;
-  if (texlink_frame_dup_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-                                      &handle) != 0) {
-    fprintf(stderr, "texlink_frame_dup_native_handle failed\n");
-    exit(1);
-  }
-
-  VkExternalMemoryImageCreateInfo ext_img = {
-      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-  };
-  VkImageCreateInfo ici = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .pNext = &ext_img,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = VK_FORMAT_B8G8R8A8_UNORM,
-      .extent = {width, height, 1},
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_LINEAR,
-      .usage =
-          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-  vk_check(vkCreateImage(ctx->device, &ici, NULL, &img->image),
-           "vkCreateImage");
-
-  VkMemoryRequirements mem_req;
-  vkGetImageMemoryRequirements(ctx->device, img->image, &mem_req);
-
-  VkMemoryDedicatedAllocateInfo dedicated = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-      .image = img->image,
-  };
-  VkImportMemoryFdInfoKHR import_info = {
-      .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-      .pNext = &dedicated,
-      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = handle.value.fd,
-  };
-  VkMemoryAllocateInfo mai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &import_info,
-      .allocationSize = mem_req.size,
-      .memoryTypeIndex = find_memory_type(ctx, mem_req.memoryTypeBits, 0),
-  };
-  if (mai.memoryTypeIndex == UINT32_MAX) {
-    fprintf(stderr, "No suitable memory type for DMA-BUF import\n");
-    exit(1);
-  }
-  vk_check(vkAllocateMemory(ctx->device, &mai, NULL, &img->memory),
-           "vkAllocateMemory");
-  vk_check(vkBindImageMemory(ctx->device, img->image, img->memory, 0),
-           "vkBindImageMemory");
-}
-
 static void submit_and_wait(VulkanContext *ctx) {
   VkSubmitInfo submit = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -320,6 +240,7 @@ static void submit_and_wait(VulkanContext *ctx) {
  * Transitions: UNDEFINED → TRANSFER_DST_OPTIMAL (clear) → GENERAL
  */
 static void render_frame(VulkanContext *ctx, SharedImage *img, float t) {
+  VkImage image = texlink_vk_image_handle(img->image);
   float r = 0.5f + 0.5f * sinf(t);
   float g = 0.5f + 0.5f * sinf(t + 2.094f);
   float b = 0.5f + 0.5f * sinf(t + 4.189f);
@@ -336,7 +257,7 @@ static void render_frame(VulkanContext *ctx, SharedImage *img, float t) {
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = img->image,
+      .image = image,
       .subresourceRange = range,
       .srcAccessMask = 0,
       .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -346,8 +267,8 @@ static void render_frame(VulkanContext *ctx, SharedImage *img, float t) {
                        &to_dst);
 
   VkClearColorValue color = {.float32 = {r, g, b, 1.0f}};
-  vkCmdClearColorImage(ctx->cmd, img->image,
-                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &color, 1, &range);
+  vkCmdClearColorImage(ctx->cmd, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       &color, 1, &range);
 
   VkImageMemoryBarrier to_general = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -355,7 +276,7 @@ static void render_frame(VulkanContext *ctx, SharedImage *img, float t) {
       .newLayout = VK_IMAGE_LAYOUT_GENERAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = img->image,
+      .image = image,
       .subresourceRange = range,
       .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
       .dstAccessMask = 0,
@@ -506,30 +427,42 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
+  SharedImage images[2] = {
+      {
+          .image =
+              texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
+                  .version = 1,
+                  .device = vk.device,
+                  .memory_properties = vk.mem_props,
+                  .width = WIDTH,
+                  .height = HEIGHT,
+                  .format = TEXLINK_FRAME_FORMAT_ARGB8888,
+                  .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+              }),
+      },
+      {
+          .image =
+              texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
+                  .version = 1,
+                  .device = vk.device,
+                  .memory_properties = vk.mem_props,
+                  .width = WIDTH,
+                  .height = HEIGHT,
+                  .format = TEXLINK_FRAME_FORMAT_ARGB8888,
+                  .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+              }),
+      },
+  };
   texlink_frame_t *frames[2] = {
-      texlink_frame_create(&(texlink_frame_desc_t){
-          .version = 1,
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
-          .width = WIDTH,
-          .height = HEIGHT,
-          .format = TEXLINK_FRAME_FORMAT_ARGB8888,
-      }),
-      texlink_frame_create(&(texlink_frame_desc_t){
-          .version = 1,
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
-          .width = WIDTH,
-          .height = HEIGHT,
-          .format = TEXLINK_FRAME_FORMAT_ARGB8888,
-      }),
+      texlink_vk_image_frame_frame(images[0].image),
+      texlink_vk_image_frame_frame(images[1].image),
   };
   if (!frames[0] || !frames[1]) {
-    fprintf(stderr, "texlink_frame_create failed\n");
+    fprintf(stderr, "texlink_vk_image_frame_create failed\n");
     return 1;
   }
-
-  SharedImage images[2];
-  setup_shared_image(&vk, &images[0], frames[0], WIDTH, HEIGHT);
-  setup_shared_image(&vk, &images[1], frames[1], WIDTH, HEIGHT);
 
   printf("Serving 'texshare'...\n");
   texlink_server_desc_t desc = {
@@ -557,7 +490,7 @@ int main(void) {
     int idx = texlink_frame_index(frame);
 
     render_frame(&vk, &images[idx], (float)glfwGetTime());
-    preview_frame(&vk, images[idx].image);
+    preview_frame(&vk, texlink_vk_image_handle(images[idx].image));
 
     texlink_server_end_frame(server, frame);
     glfwPollEvents();
@@ -569,9 +502,7 @@ int main(void) {
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < 2; i++) {
-    vkDestroyImage(vk.device, images[i].image, NULL);
-    vkFreeMemory(vk.device, images[i].memory, NULL);
-    texlink_frame_destroy(frames[i]);
+    texlink_vk_image_destroy(images[i].image);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);

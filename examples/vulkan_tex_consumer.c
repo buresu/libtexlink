@@ -3,7 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#include <texlink.h>
+#include <texlink_vulkan.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +35,7 @@ typedef struct {
 } VulkanContext;
 
 typedef struct {
-  VkImage image;
-  VkDeviceMemory memory;
+  texlink_vk_image_t *image;
   VkImageLayout current_layout;
 } ImportedImage;
 
@@ -45,16 +44,6 @@ static void vk_check(VkResult r, const char *msg) {
     fprintf(stderr, "%s failed (%d)\n", msg, r);
     exit(1);
   }
-}
-
-static uint32_t find_memory_type(VulkanContext *ctx, uint32_t type_bits,
-                                 VkMemoryPropertyFlags flags) {
-  for (uint32_t i = 0; i < ctx->mem_props.memoryTypeCount; i++) {
-    if ((type_bits & (1u << i)) &&
-        (ctx->mem_props.memoryTypes[i].propertyFlags & flags) == flags)
-      return i;
-  }
-  return UINT32_MAX;
 }
 
 static void create_instance(VulkanContext *ctx) {
@@ -224,73 +213,6 @@ static void create_swapchain(VulkanContext *ctx) {
 }
 
 /*
- * Import a DMA-BUF fd into Vulkan as a LINEAR image for use as blit source.
- * Vulkan may consume the imported fd, so request an owned duplicate from
- * texlink and keep the original frame handle valid for later use.
- */
-static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
-                                 texlink_frame_t *frame,
-                                 const texlink_meta_t *meta) {
-  texlink_native_handle_t handle;
-  if (texlink_frame_dup_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-                                      &handle) != 0) {
-    fprintf(stderr, "texlink_frame_dup_native_handle failed\n");
-    exit(1);
-  }
-
-  img->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-  VkExternalMemoryImageCreateInfo ext_img = {
-      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
-      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-  };
-  VkImageCreateInfo ici = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .pNext = &ext_img,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = VK_FORMAT_B8G8R8A8_UNORM,
-      .extent = {meta->width, meta->height, 1},
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_LINEAR,
-      .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-  vk_check(vkCreateImage(ctx->device, &ici, NULL, &img->image),
-           "vkCreateImage");
-
-  VkMemoryRequirements mem_req;
-  vkGetImageMemoryRequirements(ctx->device, img->image, &mem_req);
-
-  VkMemoryDedicatedAllocateInfo dedicated = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
-      .image = img->image,
-  };
-  VkImportMemoryFdInfoKHR import_info = {
-      .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
-      .pNext = &dedicated,
-      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = handle.value.fd,
-  };
-  VkMemoryAllocateInfo mai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &import_info,
-      .allocationSize = mem_req.size,
-      .memoryTypeIndex = find_memory_type(ctx, mem_req.memoryTypeBits, 0),
-  };
-  if (mai.memoryTypeIndex == UINT32_MAX) {
-    fprintf(stderr, "No suitable memory type for DMA-BUF import\n");
-    exit(1);
-  }
-  vk_check(vkAllocateMemory(ctx->device, &mai, NULL, &img->memory),
-           "vkAllocateMemory");
-  vk_check(vkBindImageMemory(ctx->device, img->image, img->memory, 0),
-           "vkBindImageMemory");
-}
-
-/*
  * Blit the shared image into the next swapchain image and present.
  *
  * Shared image layout transitions:
@@ -303,6 +225,7 @@ static void import_dma_buf_image(VulkanContext *ctx, ImportedImage *img,
  */
 static void display_frame(VulkanContext *ctx, ImportedImage *img,
                           const texlink_meta_t *meta) {
+  VkImage image = texlink_vk_image_handle(img->image);
   uint32_t sc_idx = 0;
   VkResult res =
       vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
@@ -324,7 +247,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = img->image,
+      .image = image,
       .subresourceRange = full,
       .srcAccessMask = 0,
       .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
@@ -351,7 +274,8 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
   int32_t sw = (int32_t)ctx->sc_extent.width;
   int32_t sh = (int32_t)ctx->sc_extent.height;
   /* EGL/OpenGL stores rows bottom-up; flip Y so the image appears correct. */
-  int flip_y = (meta->backend == TEXLINK_BACKEND_EGL);
+  int flip_y = texlink_should_flip_y((texlink_backend_t)meta->backend,
+                                     TEXLINK_BACKEND_VULKAN);
   VkImageBlit region = {
       .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
       .srcOffsets = {{0, flip_y ? (int32_t)meta->height : 0, 0},
@@ -360,7 +284,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
       .dstOffsets = {{0, 0, 0}, {sw, sh, 1}},
   };
-  vkCmdBlitImage(ctx->cmd, img->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  vkCmdBlitImage(ctx->cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                  ctx->sc_images[sc_idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                  1, &region, VK_FILTER_NEAREST);
 
@@ -384,7 +308,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .newLayout = VK_IMAGE_LAYOUT_GENERAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = img->image,
+      .image = image,
       .subresourceRange = full,
       .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
       .dstAccessMask = 0,
@@ -476,7 +400,18 @@ int main(void) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     if (!frame)
       break;
-    import_dma_buf_image(&vk, &images[i], frame, &meta);
+    images[i].image = texlink_vk_image_import(&(texlink_vk_import_desc_t){
+        .version = 1,
+        .device = vk.device,
+        .memory_properties = vk.mem_props,
+        .frame = frame,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+    });
+    images[i].current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (!images[i].image) {
+      fprintf(stderr, "texlink_vk_image_import failed for frame %u\n", i);
+      return 1;
+    }
   }
 
   while (!glfwWindowShouldClose(window)) {
@@ -497,10 +432,7 @@ int main(void) {
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < MAX_IMAGES; i++) {
-    if (images[i].image)
-      vkDestroyImage(vk.device, images[i].image, NULL);
-    if (images[i].memory)
-      vkFreeMemory(vk.device, images[i].memory, NULL);
+    texlink_vk_image_destroy(images[i].image);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);

@@ -4,7 +4,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#include <texlink.h>
+#include <texlink_egl.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,33 +34,6 @@ static float quad[] = {
     -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f,
 };
 
-typedef PFNGLEGLIMAGETARGETTEXTURE2DOESPROC TargetTex2D_fn;
-
-static EGLImage import_dma_buf(EGLDisplay dpy, int fd,
-                               const texlink_meta_t *m) {
-  EGLAttrib attrs[] = {
-      EGL_WIDTH,
-      (EGLAttrib)m->width,
-      EGL_HEIGHT,
-      (EGLAttrib)m->height,
-      EGL_LINUX_DRM_FOURCC_EXT,
-      (EGLAttrib)m->format,
-      EGL_DMA_BUF_PLANE0_FD_EXT,
-      (EGLAttrib)fd,
-      EGL_DMA_BUF_PLANE0_OFFSET_EXT,
-      0,
-      EGL_DMA_BUF_PLANE0_PITCH_EXT,
-      (EGLAttrib)m->stride,
-      EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-      (EGLAttrib)(m->modifier & 0xFFFFFFFFu),
-      EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-      (EGLAttrib)(m->modifier >> 32),
-      EGL_NONE,
-  };
-  return eglCreateImage(dpy, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL,
-                        attrs);
-}
-
 int main(void) {
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
@@ -73,13 +46,6 @@ int main(void) {
   glfwMakeContextCurrent(win);
   glfwSwapInterval(1);
   glewInit();
-
-  TargetTex2D_fn glEGLImageTargetTexture2DOES =
-      (TargetTex2D_fn)eglGetProcAddress("glEGLImageTargetTexture2DOES");
-  if (!glEGLImageTargetTexture2DOES) {
-    fprintf(stderr, "GL_OES_EGL_image not supported\n");
-    return 1;
-  }
 
   printf("Connecting to 'texshare'...\n");
   texlink_client_desc_t desc = {
@@ -98,7 +64,7 @@ int main(void) {
   EGLDisplay dpy = eglGetCurrentDisplay();
   texlink_meta_t meta = texlink_client_meta(client);
 
-  EGLImage images[2];
+  texlink_egl_image_t *images[2] = {0};
   GLuint textures[2];
   uint32_t frame_count = texlink_client_frame_count(client);
   if (frame_count > 2)
@@ -108,25 +74,22 @@ int main(void) {
     if (!frame)
       break;
 
-    texlink_native_handle_t handle;
-    if (texlink_frame_get_native_handle(frame, TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-                                        &handle) != 0) {
-      fprintf(stderr, "texlink_frame_get_native_handle failed for frame %u\n",
-              i);
-      return 1;
-    }
-
-    images[i] = import_dma_buf(dpy, handle.value.fd, &meta);
-    if (images[i] == EGL_NO_IMAGE) {
-      fprintf(stderr, "eglCreateImage failed for frame %u\n", i);
+    images[i] = texlink_egl_image_import(&(texlink_egl_import_desc_t){
+        .version = 1,
+        .display = dpy,
+        .frame = frame,
+    });
+    if (!images[i]) {
+      fprintf(stderr, "texlink_egl_image_import failed for frame %u\n", i);
       return 1;
     }
 
     glGenTextures(1, &textures[i]);
-    glBindTexture(GL_TEXTURE_2D, textures[i]);
-    glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, images[i]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (texlink_egl_image_bind_texture_2d(images[i], textures[i]) != 0) {
+      fprintf(stderr, "texlink_egl_image_bind_texture_2d failed for frame %u\n",
+              i);
+      return 1;
+    }
   }
   glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -181,7 +144,9 @@ int main(void) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, textures[idx]);
     glUniform1i(tex_loc, 0);
-    glUniform1i(flip_y_loc, meta.backend != TEXLINK_BACKEND_EGL ? 1 : 0);
+    glUniform1i(flip_y_loc,
+                texlink_should_flip_y((texlink_backend_t)meta.backend,
+                                      TEXLINK_BACKEND_EGL));
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
@@ -194,6 +159,10 @@ int main(void) {
   }
 
   texlink_client_destroy(client);
+  for (uint32_t i = 0; i < frame_count; i++) {
+    glDeleteTextures(1, &textures[i]);
+    texlink_egl_image_destroy(images[i]);
+  }
   glfwDestroyWindow(win);
   glfwTerminate();
   return 0;

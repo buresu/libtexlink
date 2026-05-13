@@ -111,6 +111,22 @@ typedef struct {
   } value;
 } texlink_native_handle_t;
 
+typedef struct {
+  uint32_t version;
+
+  texlink_frame_type_t type;
+  uint32_t width;
+  uint32_t height;
+  uint32_t depth;
+  uint32_t format;
+  uint32_t stride;
+  uint64_t modifier;
+  uint64_t size;
+
+  texlink_backend_t backend;
+  texlink_native_handle_t handle;
+} texlink_frame_native_desc_t;
+
 typedef enum {
   TEXLINK_MAP_READ = 1u << 0,
   TEXLINK_MAP_WRITE = 1u << 1,
@@ -190,9 +206,14 @@ texlink_meta_t texlink_client_meta(texlink_client_t *client);
 
 /* Frame API */
 texlink_frame_t *texlink_frame_create(const texlink_frame_desc_t *desc);
+texlink_frame_t *texlink_frame_create_from_native_handle(
+    const texlink_frame_native_desc_t *desc);
 void texlink_frame_destroy(texlink_frame_t *frame);
 texlink_meta_t texlink_frame_meta(texlink_frame_t *frame);
 int texlink_frame_index(texlink_frame_t *frame);
+
+int texlink_should_flip_y(texlink_backend_t producer,
+                          texlink_backend_t consumer);
 
 int texlink_frame_get_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_type_t type,
