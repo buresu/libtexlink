@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TEXLINK_DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
+
 struct texlink_vk_image {
   VkDevice device;
   VkImage image;
@@ -80,6 +82,20 @@ import_frame(VkDevice device,
       .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
       .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
   };
+  VkSubresourceLayout plane_layout = {
+      .offset = 0,
+      .rowPitch = meta.stride,
+  };
+  VkImageDrmFormatModifierExplicitCreateInfoEXT modifier = {
+      .sType =
+          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
+      .drmFormatModifier = meta.modifier,
+      .drmFormatModifierPlaneCount = 1,
+      .pPlaneLayouts = &plane_layout,
+  };
+  if (meta.modifier != TEXLINK_DRM_FORMAT_MOD_INVALID && meta.stride != 0)
+    external.pNext = &modifier;
+
   VkImageCreateInfo image_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .pNext = &external,
@@ -89,7 +105,8 @@ import_frame(VkDevice device,
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_LINEAR,
+      .tiling = external.pNext ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT
+                               : VK_IMAGE_TILING_LINEAR,
       .usage = usage,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .initialLayout = initial_layout,
