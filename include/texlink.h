@@ -215,19 +215,24 @@ int texlink_frame_index(texlink_frame_t *frame);
 int texlink_frame_should_flip_y(texlink_backend_t producer,
                                 texlink_backend_t consumer);
 
+/* Frame native handle API */
 int texlink_frame_get_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_type_t type,
                                     texlink_native_handle_t *out_handle);
 int texlink_frame_dup_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_type_t type,
                                     texlink_native_handle_t *out_handle);
+
+/* Native handle API */
 int texlink_native_handle_close(texlink_native_handle_t *handle);
 
+/* Frame mapping API */
 int texlink_frame_map(texlink_frame_t *frame, const texlink_map_desc_t *desc,
                       texlink_mapping_t *out_mapping);
 int texlink_frame_unmap(texlink_frame_t *frame);
 int texlink_frame_is_mapped(texlink_frame_t *frame);
 
+/* Frame CPU access API */
 int texlink_frame_cpu_begin(texlink_frame_t *frame,
                             const texlink_cpu_access_desc_t *desc);
 int texlink_frame_cpu_end(texlink_frame_t *frame,
