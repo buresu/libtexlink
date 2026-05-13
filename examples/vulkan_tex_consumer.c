@@ -274,8 +274,8 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
   int32_t sw = (int32_t)ctx->sc_extent.width;
   int32_t sh = (int32_t)ctx->sc_extent.height;
   /* EGL/OpenGL stores rows bottom-up; flip Y so the image appears correct. */
-  int flip_y = texlink_should_flip_y((texlink_backend_t)meta->backend,
-                                     TEXLINK_BACKEND_VULKAN);
+  int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta->backend,
+                                           TEXLINK_BACKEND_VULKAN);
   VkImageBlit region = {
       .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
       .srcOffsets = {{0, flip_y ? (int32_t)meta->height : 0, 0},

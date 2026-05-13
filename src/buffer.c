@@ -290,8 +290,8 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
   free(frame);
 }
 
-int texlink_should_flip_y(texlink_backend_t producer,
-                          texlink_backend_t consumer) {
+int texlink_frame_should_flip_y(texlink_backend_t producer,
+                                texlink_backend_t consumer) {
   if (producer == TEXLINK_BACKEND_UNKNOWN ||
       consumer == TEXLINK_BACKEND_UNKNOWN)
     return 0;

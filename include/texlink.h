@@ -212,8 +212,8 @@ void texlink_frame_destroy(texlink_frame_t *frame);
 texlink_meta_t texlink_frame_meta(texlink_frame_t *frame);
 int texlink_frame_index(texlink_frame_t *frame);
 
-int texlink_should_flip_y(texlink_backend_t producer,
-                          texlink_backend_t consumer);
+int texlink_frame_should_flip_y(texlink_backend_t producer,
+                                texlink_backend_t consumer);
 
 int texlink_frame_get_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_type_t type,

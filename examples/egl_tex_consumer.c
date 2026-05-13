@@ -145,8 +145,8 @@ int main(void) {
     glBindTexture(GL_TEXTURE_2D, textures[idx]);
     glUniform1i(tex_loc, 0);
     glUniform1i(flip_y_loc,
-                texlink_should_flip_y((texlink_backend_t)meta.backend,
-                                      TEXLINK_BACKEND_EGL));
+                texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+                                            TEXLINK_BACKEND_EGL));
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
