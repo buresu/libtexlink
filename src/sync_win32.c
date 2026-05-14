@@ -29,10 +29,16 @@ static int normalize_range(uint64_t frame_size, uint64_t offset,
   return 0;
 }
 
+static int frame_is_mappable(texlink_frame_t *frame) {
+  return frame->handle.type == TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
+}
+
 int texlink_frame_map(texlink_frame_t *frame, const texlink_map_desc_t *desc,
                       texlink_mapping_t *out_mapping) {
   if (!frame || !frame->win32_handle || !desc || !out_mapping)
     return -EINVAL;
+  if (!frame_is_mappable(frame))
+    return -ENOTSUP;
   if (!(desc->flags & (TEXLINK_MAP_READ | TEXLINK_MAP_WRITE)))
     return -EINVAL;
 
@@ -109,6 +115,8 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
                             const texlink_cpu_access_desc_t *desc) {
   if (!frame || !desc)
     return -EINVAL;
+  if (!frame_is_mappable(frame))
+    return -ENOTSUP;
   if (!texlink_frame_is_mapped(frame))
     return -EINVAL;
   if (!(desc->access & (TEXLINK_CPU_ACCESS_READ | TEXLINK_CPU_ACCESS_WRITE)))
@@ -132,6 +140,8 @@ int texlink_frame_cpu_end(texlink_frame_t *frame,
                           const texlink_cpu_access_desc_t *desc) {
   if (!frame || !desc)
     return -EINVAL;
+  if (!frame_is_mappable(frame))
+    return -ENOTSUP;
   if (!texlink_frame_is_mapped(frame))
     return -EINVAL;
   if (!frame->active_access || desc->access != frame->active_access)

@@ -1,4 +1,6 @@
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 199309L
+#endif
 #include <GLFW/glfw3.h>
 
 #include <vulkan/vulkan.h>
@@ -11,6 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 #define WIDTH 512
 #define HEIGHT 512
@@ -20,11 +26,15 @@ static void sleep_until_next_frame(double *last_time, double interval_sec) {
   double now = glfwGetTime();
   double wait = *last_time + interval_sec - now;
   if (wait > 0.0) {
+#ifdef _WIN32
+    Sleep((DWORD)(wait * 1000.0));
+#else
     struct timespec ts = {
         .tv_sec = (time_t)wait,
         .tv_nsec = (long)((wait - (time_t)wait) * 1e9),
     };
     nanosleep(&ts, NULL);
+#endif
   }
   *last_time = glfwGetTime();
 }
@@ -115,9 +125,13 @@ static void create_device(VulkanContext *ctx) {
 
   const char *exts[] = {
       VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME,
+#ifdef _WIN32
+      VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,
+#else
       VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
       VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
       VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+#endif
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   };
 

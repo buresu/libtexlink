@@ -75,9 +75,49 @@ endif()
 set(TEXLINK_INSTALL_TARGETS texlink)
 set(TEXLINK_INSTALL_HEADERS include/texlink.h)
 
-if(NOT WIN32 AND TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GLFW3 glfw3)
+if(TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
+  if(WIN32)
+    find_package(glfw3 CONFIG QUIET)
+    if(glfw3_FOUND)
+      set(GLFW3_FOUND TRUE)
+      set(TEXLINK_GLFW_TARGET glfw)
+      if(NOT TARGET glfw)
+        set(TEXLINK_GLFW_TARGET glfw3)
+      endif()
+    else()
+      set(TEXLINK_GLFW_ROOT "$ENV{GLFW_ROOT}")
+      if(NOT TEXLINK_GLFW_ROOT AND EXISTS "$ENV{USERPROFILE}/scoop/apps/glfw/current")
+        set(TEXLINK_GLFW_ROOT "$ENV{USERPROFILE}/scoop/apps/glfw/current")
+      endif()
+      find_path(GLFW3_INCLUDE_DIR
+                NAMES GLFW/glfw3.h
+                PATHS "${TEXLINK_GLFW_ROOT}"
+                PATH_SUFFIXES include
+                NO_DEFAULT_PATH)
+      find_library(GLFW3_LIBRARY
+                   NAMES glfw3dll glfw3 glfw
+                   PATHS "${TEXLINK_GLFW_ROOT}"
+                   PATH_SUFFIXES lib-vc2022 lib-static-ucrt lib
+                   NO_DEFAULT_PATH)
+      find_file(GLFW3_RUNTIME
+                NAMES glfw3.dll glfw.dll
+                PATHS "${TEXLINK_GLFW_ROOT}"
+                PATH_SUFFIXES lib-vc2022 lib-static-ucrt bin
+                NO_DEFAULT_PATH)
+      if(GLFW3_INCLUDE_DIR AND GLFW3_LIBRARY)
+        set(GLFW3_FOUND TRUE)
+        set(GLFW3_INCLUDE_DIRS "${GLFW3_INCLUDE_DIR}")
+        set(GLFW3_LIBRARIES "${GLFW3_LIBRARY}")
+        set(GLFW3_RUNTIME "${GLFW3_RUNTIME}")
+      endif()
+    endif()
+  else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GLFW3 glfw3)
+  endif()
+  if(TEXLINK_WITH_VULKAN AND NOT GLFW3_FOUND)
+    message(STATUS "GLFW3 not found; skipping Vulkan example programs")
+  endif()
 endif()
 
 if(NOT WIN32 AND TEXLINK_WITH_EGL)
@@ -117,7 +157,12 @@ if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
   target_include_directories(
     texlink_vulkan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                           $<INSTALL_INTERFACE:include> ${Vulkan_INCLUDE_DIRS})
-  target_compile_options(texlink_vulkan PRIVATE -Wall -Wextra -Wpedantic)
+  if(MSVC)
+    target_compile_definitions(texlink_vulkan PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(texlink_vulkan PRIVATE /W4)
+  else()
+    target_compile_options(texlink_vulkan PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
   list(APPEND TEXLINK_INSTALL_TARGETS texlink_vulkan)
   list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_vulkan.h)
 endif()
@@ -150,13 +195,37 @@ if(TEXLINK_BUILD_EXAMPLES)
   if(TARGET texlink_vulkan AND GLFW3_FOUND)
     foreach(example vulkan_tex_producer vulkan_tex_consumer)
       add_executable(${example} examples/${example}.c)
-      target_link_libraries(${example} PRIVATE texlink_vulkan
-                                               ${GLFW3_LIBRARIES} m)
+      target_link_libraries(${example} PRIVATE texlink_vulkan)
+      if(WIN32)
+        if(TEXLINK_GLFW_TARGET)
+          target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+        else()
+          target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES} user32
+                                                   gdi32 shell32)
+          if(GLFW3_RUNTIME)
+            add_custom_command(
+              TARGET ${example}
+              POST_BUILD
+              COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                      "${GLFW3_RUNTIME}" $<TARGET_FILE_DIR:${example}>)
+          endif()
+        endif()
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES} m)
+      endif()
       target_include_directories(
         ${example} PRIVATE include ${GLFW3_INCLUDE_DIRS} ${Vulkan_INCLUDE_DIRS})
       target_compile_definitions(${example} PRIVATE GLFW_INCLUDE_VULKAN)
-      target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic
-                                                ${GLFW3_CFLAGS_OTHER})
+      if(WIN32)
+        target_compile_definitions(${example} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+      endif()
+      if(MSVC)
+        target_compile_definitions(${example} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${example} PRIVATE /W4)
+      else()
+        target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic
+                                                  ${GLFW3_CFLAGS_OTHER})
+      endif()
     endforeach()
   endif()
 endif()

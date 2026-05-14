@@ -114,6 +114,10 @@ int texlink_socket_accept(texlink_socket_t server, texlink_socket_t *out_client)
 
   *out_client = socket_alloc(TEXLINK_WIN32_SOCKET_PIPE, client_pipe,
                              server->path);
+  if (*out_client) {
+    DWORD mode = PIPE_READMODE_BYTE | PIPE_WAIT;
+    SetNamedPipeHandleState(client_pipe, &mode, NULL, NULL);
+  }
   return *out_client ? 0 : -1;
 }
 
@@ -121,8 +125,6 @@ void texlink_socket_close(texlink_socket_t sock) {
   if (!sock)
     return;
   if (sock->pipe && sock->pipe != INVALID_HANDLE_VALUE) {
-    if (sock->kind == TEXLINK_WIN32_SOCKET_PIPE)
-      FlushFileBuffers(sock->pipe);
     DisconnectNamedPipe(sock->pipe);
     CloseHandle(sock->pipe);
   }

@@ -37,6 +37,17 @@ static int is_win32_handle_type(texlink_native_handle_type_t type) {
   }
 }
 
+static int is_shared_win32_memory_handle(texlink_native_handle_type_t type) {
+  switch (type) {
+  case TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE:
+  case TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE:
+  case TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
 static void frame_set_handle(texlink_frame_t *frame,
                              texlink_native_handle_type_t type, HANDLE handle,
                              uint32_t flags) {
@@ -113,6 +124,12 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
       !desc->handle.value.ptr || desc->size > UINT32_MAX)
     return NULL;
 
+  uint64_t size = desc->size;
+  if (size == 0 && desc->stride != 0 && desc->height != 0)
+    size = (uint64_t)desc->stride * desc->height;
+  if (size > UINT32_MAX)
+    return NULL;
+
   HANDLE handle = (HANDLE)desc->handle.value.ptr;
   if (!(desc->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED)) {
     HANDLE dup_handle = NULL;
@@ -135,7 +152,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
   frame->map_base = NULL;
   frame->map_ptr = NULL;
   frame->drm_fd = -1;
-  frame->size = (size_t)desc->size;
+  frame->size = (size_t)size;
   frame->meta.backend = (uint32_t)desc->backend;
   frame->meta.type = desc->type;
   frame->meta.width = desc->width;
@@ -144,7 +161,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
   frame->meta.format = desc->format;
   frame->meta.stride = desc->stride;
   frame->meta.modifier = desc->modifier;
-  frame->meta.size = (uint32_t)desc->size;
+  frame->meta.size = (uint32_t)size;
   return frame;
 }
 
@@ -190,14 +207,23 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_t *out_handle) {
   if (!frame || !out_handle || type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
     return -EINVAL;
-  if (type != frame->handle.type)
+  if (type != frame->handle.type) {
+    if (!(type == TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE &&
+          is_shared_win32_memory_handle(frame->handle.type)))
+      return -ENOTSUP;
+  }
+  if (frame->handle.type == TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE &&
+      type != TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE)
+    return -ENOTSUP;
+  if (type == TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE &&
+      frame->handle.type != TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE)
     return -ENOTSUP;
   if (!frame->handle.value.ptr)
     return -ENOENT;
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->version = 1;
-  out_handle->type = type;
+  out_handle->type = frame->handle.type;
   out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   out_handle->value.ptr = frame->handle.value.ptr;
   return 0;
