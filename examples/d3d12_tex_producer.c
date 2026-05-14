@@ -24,6 +24,7 @@ typedef struct {
   IDXGISwapChain3 *swapchain;
   ID3D12Resource *backbuffers[2];
   ID3D12Fence *fence;
+  HANDLE shared_fence;
   HANDLE fence_event;
   UINT rtv_size;
   uint64_t fence_value;
@@ -32,6 +33,8 @@ typedef struct {
 static void release_context(d3d12_context_t *ctx) {
   if (ctx->fence_event)
     CloseHandle(ctx->fence_event);
+  if (ctx->shared_fence)
+    CloseHandle(ctx->shared_fence);
   if (ctx->fence)
     ctx->fence->lpVtbl->Release(ctx->fence);
   if (ctx->rtv_heap)
@@ -52,7 +55,7 @@ static void release_context(d3d12_context_t *ctx) {
     ctx->device->lpVtbl->Release(ctx->device);
 }
 
-static int wait_gpu(d3d12_context_t *ctx) {
+static int signal_and_wait_gpu(d3d12_context_t *ctx, uint64_t *out_value) {
   uint64_t value = ++ctx->fence_value;
   if (FAILED(ctx->queue->lpVtbl->Signal(ctx->queue, ctx->fence, value)))
     return -1;
@@ -62,6 +65,8 @@ static int wait_gpu(d3d12_context_t *ctx) {
       return -1;
     WaitForSingleObject(ctx->fence_event, INFINITE);
   }
+  if (out_value)
+    *out_value = value;
   return 0;
 }
 
@@ -147,9 +152,14 @@ static int init_context(d3d12_context_t *ctx, HWND hwnd) {
                                                 ctx->backbuffers[i], NULL, rtv);
   }
 
-  hr = ctx->device->lpVtbl->CreateFence(ctx->device, 0, D3D12_FENCE_FLAG_NONE,
+  hr = ctx->device->lpVtbl->CreateFence(ctx->device, 0, D3D12_FENCE_FLAG_SHARED,
                                         &IID_ID3D12Fence, (void **)&ctx->fence);
   if (FAILED(hr))
+    return -1;
+  hr = ctx->device->lpVtbl->CreateSharedHandle(
+      ctx->device, (ID3D12DeviceChild *)ctx->fence, NULL, GENERIC_ALL, NULL,
+      &ctx->shared_fence);
+  if (FAILED(hr) || !ctx->shared_fence)
     return -1;
   ctx->fence_event = CreateEventA(NULL, FALSE, FALSE, NULL);
   return ctx->fence_event ? 0 : -1;
@@ -164,7 +174,7 @@ static D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle(d3d12_context_t *ctx, int idx) {
 }
 
 static int clear_resource(d3d12_context_t *ctx, ID3D12Resource *resource,
-                          int idx, float t) {
+                          int idx, float t, uint64_t *out_fence_value) {
   D3D12_RESOURCE_BARRIER barriers[4];
   D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtv_handle(ctx, idx);
   UINT bb_idx = ctx->swapchain->lpVtbl->GetCurrentBackBufferIndex(ctx->swapchain);
@@ -215,7 +225,7 @@ static int clear_resource(d3d12_context_t *ctx, ID3D12Resource *resource,
   lists[0] = (ID3D12CommandList *)ctx->list;
   ctx->queue->lpVtbl->ExecuteCommandLists(ctx->queue, 1, lists);
   ctx->swapchain->lpVtbl->Present(ctx->swapchain, 1, 0);
-  return wait_gpu(ctx);
+  return signal_and_wait_gpu(ctx, out_fence_value);
 }
 
 int main(int argc, char **argv) {
@@ -265,6 +275,18 @@ int main(int argc, char **argv) {
       return 1;
     }
     frames[i] = texlink_d3d12_texture_frame_frame(texture_frames[i]);
+    texlink_native_handle_t sync_handle = {
+        .version = 1,
+        .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+        .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+        .value.ptr = ctx.shared_fence,
+    };
+    if (texlink_frame_set_sync_native_handle(frames[i], &sync_handle, 0) != 0) {
+      fprintf(stderr, "texlink_frame_set_sync_native_handle failed\n");
+      release_context(&ctx);
+      glfwTerminate();
+      return 1;
+    }
   }
 
   texlink_server_t *server = texlink_server_create(&(texlink_server_desc_t){
@@ -294,10 +316,12 @@ int main(int argc, char **argv) {
     if (idx < 0 || idx >= FRAME_COUNT)
       idx = 0;
     float phase = 0.5f + 0.5f * sinf((float)glfwGetTime() * 1.6f);
+    uint64_t fence_value = 0;
     if (clear_resource(&ctx, texlink_d3d12_texture_frame_resource(
                                  texture_frames[idx]),
-                       idx, phase) != 0)
+                       idx, phase, &fence_value) != 0)
       break;
+    texlink_frame_set_sync_value(frame, fence_value);
     texlink_server_end_frame(server, frame);
 
     glfwPollEvents();

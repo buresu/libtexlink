@@ -78,6 +78,7 @@ texlink_native_handle_type_t texlink_default_native_handle_type(void) {
 void texlink_frame_init_received(texlink_frame_t *frame) {
   frame->dma_fd = -1;
   frame->sync_fd = -1;
+  frame->sync_handle = NULL;
   frame->map_base = NULL;
   frame->map_ptr = NULL;
   frame->drm_fd = -1;
@@ -109,6 +110,19 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
   return 0;
 }
 
+int texlink_frame_recv_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type) {
+  if (!frame || type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
+    return 0;
+  HANDLE handle = NULL;
+  if (texlink_recv_ipc_handles(sock, &handle, 1) < 0)
+    return -1;
+  frame->sync_handle = handle;
+  frame->meta.sync_handle_type = (uint32_t)type;
+  return 0;
+}
+
 int texlink_frame_send_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type) {
@@ -124,6 +138,20 @@ int texlink_frame_send_native_handle(texlink_socket_t sock,
   return texlink_send_ipc_handles(sock, &ipc_handle, 1);
 }
 
+int texlink_frame_send_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type) {
+  texlink_native_handle_t handle;
+  uint64_t value;
+  if (type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
+    return 0;
+  if (texlink_frame_get_sync_native_handle(frame, type, &handle, &value) != 0 ||
+      !texlink_native_handle_type_is_ipc(handle.type))
+    return -1;
+  texlink_ipc_handle_t ipc_handle = (HANDLE)handle.value.ptr;
+  return texlink_send_ipc_handles(sock, &ipc_handle, 1);
+}
+
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
   if (!frame)
     return;
@@ -135,6 +163,13 @@ void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
     frame->win32_handle = NULL;
   }
   frame->dma_fd = -1;
+}
+
+void texlink_frame_close_sync_handle(texlink_frame_t *frame) {
+  if (!frame || !frame->sync_handle)
+    return;
+  CloseHandle(frame->sync_handle);
+  frame->sync_handle = NULL;
 }
 
 void texlink_frame_unmap_ipc_view(texlink_frame_t *frame) {

@@ -78,6 +78,7 @@ static texlink_frame_t *alloc_mapping(size_t size, uint32_t w, uint32_t h,
   frame_set_handle(frame, TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE, mapping,
                    TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
   frame->sync_fd = -1;
+  frame->sync_handle = NULL;
   frame->index = -1;
   frame->map_base = NULL;
   frame->map_ptr = NULL;
@@ -151,6 +152,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
                        ? desc->handle.flags
                        : TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
   frame->sync_fd = -1;
+  frame->sync_handle = NULL;
   frame->index = -1;
   frame->map_base = NULL;
   frame->map_ptr = NULL;
@@ -176,6 +178,8 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
   if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
       is_win32_handle_type(frame->handle.type) && frame->handle.value.ptr)
     CloseHandle((HANDLE)frame->handle.value.ptr);
+  if (frame->sync_handle)
+    CloseHandle(frame->sync_handle);
   free(frame);
 }
 
@@ -257,6 +261,64 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
   out_handle->flags = flags;
   out_handle->value.ptr = dup_handle;
   return 0;
+}
+
+int texlink_frame_set_sync_native_handle(texlink_frame_t *frame,
+                                         const texlink_native_handle_t *handle,
+                                         uint64_t value) {
+  if (!frame || !handle || !is_win32_handle_type(handle->type) ||
+      !handle->value.ptr)
+    return -EINVAL;
+  if (handle->type != TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE)
+    return -ENOTSUP;
+
+  HANDLE sync_handle = (HANDLE)handle->value.ptr;
+  if (!(handle->flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED)) {
+    HANDLE dup_handle = NULL;
+    if (!DuplicateHandle(GetCurrentProcess(), sync_handle, GetCurrentProcess(),
+                         &dup_handle, 0, FALSE, DUPLICATE_SAME_ACCESS))
+      return -EIO;
+    sync_handle = dup_handle;
+  }
+
+  if (frame->sync_handle)
+    CloseHandle(frame->sync_handle);
+  frame->sync_handle = sync_handle;
+  frame->meta.sync_handle_type = (uint32_t)handle->type;
+  frame->meta.sync_value = value;
+  return 0;
+}
+
+int texlink_frame_get_sync_native_handle(texlink_frame_t *frame,
+                                         texlink_native_handle_type_t type,
+                                         texlink_native_handle_t *out_handle,
+                                         uint64_t *out_value) {
+  if (!frame || !out_handle || type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
+    return -EINVAL;
+  if (type != (texlink_native_handle_type_t)frame->meta.sync_handle_type)
+    return -ENOTSUP;
+  if (!frame->sync_handle)
+    return -ENOENT;
+
+  memset(out_handle, 0, sizeof(*out_handle));
+  out_handle->version = 1;
+  out_handle->type = type;
+  out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  out_handle->value.ptr = frame->sync_handle;
+  if (out_value)
+    *out_value = frame->meta.sync_value;
+  return 0;
+}
+
+int texlink_frame_set_sync_value(texlink_frame_t *frame, uint64_t value) {
+  if (!frame)
+    return -EINVAL;
+  frame->meta.sync_value = value;
+  return 0;
+}
+
+uint64_t texlink_frame_sync_value(texlink_frame_t *frame) {
+  return frame ? frame->meta.sync_value : 0;
 }
 
 int texlink_native_handle_close(texlink_native_handle_t *handle) {

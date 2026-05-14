@@ -108,6 +108,15 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
   return 0;
 }
 
+int texlink_frame_recv_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type) {
+  (void)sock;
+  (void)frame;
+  (void)type;
+  return 0;
+}
+
 int texlink_frame_send_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type) {
@@ -116,6 +125,15 @@ int texlink_frame_send_native_handle(texlink_socket_t sock,
       !texlink_native_handle_type_is_ipc(handle.type))
     return -1;
   return texlink_send_ipc_handles(sock, &handle.value.fd, 1);
+}
+
+int texlink_frame_send_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type) {
+  (void)sock;
+  (void)frame;
+  (void)type;
+  return 0;
 }
 
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
@@ -130,6 +148,10 @@ void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
     close(frame->dma_fd);
   }
   frame->dma_fd = -1;
+}
+
+void texlink_frame_close_sync_handle(texlink_frame_t *frame) {
+  (void)frame;
 }
 
 void texlink_frame_unmap_ipc_view(texlink_frame_t *frame) {

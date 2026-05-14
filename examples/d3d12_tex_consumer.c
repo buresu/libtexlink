@@ -14,6 +14,21 @@
 #define WIDTH 256
 #define HEIGHT 256
 
+static int wait_shared_fence(ID3D12Fence *fence, uint64_t value) {
+  if (!fence || value == 0)
+    return 0;
+  if (fence->lpVtbl->GetCompletedValue(fence) >= value)
+    return 0;
+  HANDLE event = CreateEventA(NULL, FALSE, FALSE, NULL);
+  if (!event)
+    return -1;
+  HRESULT hr = fence->lpVtbl->SetEventOnCompletion(fence, value, event);
+  if (SUCCEEDED(hr))
+    WaitForSingleObject(event, 5000);
+  CloseHandle(event);
+  return SUCCEEDED(hr) ? 0 : -1;
+}
+
 typedef struct {
   ID3D12Device *device;
   ID3D12CommandQueue *queue;
@@ -343,12 +358,14 @@ int main(int argc, char **argv) {
     frame_count = MAX_FRAMES;
 
   texlink_d3d12_texture_frame_t *texture_frames[MAX_FRAMES] = {0};
+  ID3D12Fence *sync_fences[MAX_FRAMES] = {0};
   for (uint32_t i = 0; i < frame_count; i++) {
+    texlink_frame_t *source_frame = texlink_client_frame(client, i);
     texture_frames[i] =
         texlink_d3d12_texture_frame_import(&(texlink_d3d12_import_desc_t){
             .version = 1,
             .device = ctx.device,
-            .frame = texlink_client_frame(client, i),
+            .frame = source_frame,
         });
     if (!texture_frames[i]) {
       fprintf(stderr, "texlink_d3d12_texture_frame_import failed: %s\n",
@@ -357,6 +374,18 @@ int main(int argc, char **argv) {
       release_context(&ctx);
       glfwTerminate();
       return 1;
+    }
+
+    texlink_native_handle_t sync_handle;
+    uint64_t sync_value;
+    if (texlink_frame_get_sync_native_handle(
+            source_frame, TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+            &sync_handle, &sync_value) == 0) {
+      HRESULT hr = ctx.device->lpVtbl->OpenSharedHandle(
+          ctx.device, (HANDLE)sync_handle.value.ptr, &IID_ID3D12Fence,
+          (void **)&sync_fences[i]);
+      if (FAILED(hr))
+        sync_fences[i] = NULL;
     }
   }
 
@@ -372,6 +401,7 @@ int main(int argc, char **argv) {
     if (idx < 0 || (uint32_t)idx >= frame_count)
       idx = 0;
 
+    wait_shared_fence(sync_fences[idx], texlink_frame_sync_value(frame));
     unsigned char bgra[4] = {0};
     ID3D12Resource *resource =
         texlink_d3d12_texture_frame_resource(texture_frames[idx]);
@@ -383,6 +413,10 @@ int main(int argc, char **argv) {
 
   for (uint32_t i = 0; i < frame_count; i++)
     texlink_d3d12_texture_frame_destroy(texture_frames[i]);
+  for (uint32_t i = 0; i < frame_count; i++) {
+    if (sync_fences[i])
+      sync_fences[i]->lpVtbl->Release(sync_fences[i]);
+  }
   texlink_client_destroy(client);
   release_context(&ctx);
   glfwDestroyWindow(window);

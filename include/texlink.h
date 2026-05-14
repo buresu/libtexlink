@@ -61,6 +61,9 @@ typedef struct {
   uint64_t modifier;
   uint32_t size;
   uint64_t frame_id;
+  uint32_t sync_handle_type;
+  uint32_t _pad0;
+  uint64_t sync_value;
 } texlink_meta_t;
 
 typedef struct texlink_frame texlink_frame_t;
@@ -226,6 +229,15 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
 int texlink_frame_dup_native_handle(texlink_frame_t *frame,
                                     texlink_native_handle_type_t type,
                                     texlink_native_handle_t *out_handle);
+int texlink_frame_set_sync_native_handle(texlink_frame_t *frame,
+                                         const texlink_native_handle_t *handle,
+                                         uint64_t value);
+int texlink_frame_get_sync_native_handle(texlink_frame_t *frame,
+                                         texlink_native_handle_type_t type,
+                                         texlink_native_handle_t *out_handle,
+                                         uint64_t *out_value);
+int texlink_frame_set_sync_value(texlink_frame_t *frame, uint64_t value);
+uint64_t texlink_frame_sync_value(texlink_frame_t *frame);
 
 /* Native handle API */
 int texlink_native_handle_close(texlink_native_handle_t *handle);

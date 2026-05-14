@@ -42,7 +42,7 @@ struct gbm_bo;
 #else
 #define TEXLINK_SHM_PREFIX "/texlink_"
 #endif
-#define TEXLINK_PROTO_VER 1
+#define TEXLINK_PROTO_VER 2
 #define TEXLINK_NAME_MAX 64
 #define TEXLINK_MAX_CLIENTS 16
 #define TEXLINK_MAX_SESSIONS 64
@@ -62,6 +62,7 @@ struct texlink_frame {
   int sync_fd;
 #ifdef _WIN32
   HANDLE win32_handle;
+  HANDLE sync_handle;
 #endif
   int index;
   void *map_base;
@@ -88,7 +89,7 @@ typedef struct {
   _Atomic uint32_t current_idx;
   uint32_t buf_count;
   texlink_meta_t meta;
-  uint8_t _pad[56]; /* pad to 128 bytes */
+  uint8_t _pad[40]; /* pad to 128 bytes */
 } texlink_shm_t;
 
 /* Handshake sent over socket at connect time */
@@ -106,6 +107,7 @@ typedef struct {
   uint64_t frame_id;
   uint32_t buf_idx;
   uint32_t has_sync_fd; /* 1 if SCM_RIGHTS carries sync_fd */
+  uint64_t sync_value;
 } texlink_frame_msg_t;
 
 /* Registry entry stored in TEXLINK_REGISTRY_PATH */
@@ -215,6 +217,13 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
 int texlink_frame_send_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type);
+int texlink_frame_recv_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type);
+int texlink_frame_send_sync_handle(texlink_socket_t sock,
+                                   texlink_frame_t *frame,
+                                   texlink_native_handle_type_t type);
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame);
+void texlink_frame_close_sync_handle(texlink_frame_t *frame);
 void texlink_frame_unmap_ipc_view(texlink_frame_t *frame);
 void texlink_close_sync_fd(int sync_fd);

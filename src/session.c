@@ -41,6 +41,7 @@ static void session_free_consumer_frames(texlink_session_t *s) {
       texlink_native_handle_close(&sync_handle);
     }
     texlink_frame_close_ipc_handle(frame);
+    texlink_frame_close_sync_handle(frame);
     free(frame);
     s->frames[i] = NULL;
   }
@@ -72,7 +73,12 @@ static texlink_session_t *session_connect(const char *path) {
 
   texlink_native_handle_type_t handle_type =
       frame_handle_type_from_meta(&hs.meta);
+  texlink_native_handle_type_t sync_handle_type =
+      (texlink_native_handle_type_t)hs.meta.sync_handle_type;
   if (!texlink_native_handle_type_is_ipc(handle_type))
+    goto err;
+  if (sync_handle_type != TEXLINK_NATIVE_HANDLE_UNKNOWN &&
+      !texlink_native_handle_type_is_ipc(sync_handle_type))
     goto err;
 
   /* Receive native fd handles */
@@ -87,6 +93,9 @@ static texlink_session_t *session_connect(const char *path) {
     s->frames[i] = frame;
 
     if (texlink_frame_recv_native_handle(sock_fd, frame, handle_type) < 0)
+      goto err;
+    if (sync_handle_type != TEXLINK_NATIVE_HANDLE_UNKNOWN &&
+        texlink_frame_recv_sync_handle(sock_fd, frame, sync_handle_type) < 0)
       goto err;
   }
 
@@ -183,6 +192,7 @@ static texlink_frame_t *session_consumer_acquire(texlink_session_t *s) {
 
   /* Store frame_id from the socket message to avoid non-atomic shm read */
   s->last_frame_id = msg.frame_id;
+  s->frames[idx]->meta.sync_value = msg.sync_value;
 
   /* acquire-load pairs with the release-store in producer_end */
   (void)atomic_load_explicit(&s->shm->current_idx, memory_order_acquire);
@@ -367,6 +377,14 @@ int texlink_server_poll(texlink_server_t *server) {
         ok = 0;
         break;
       }
+      texlink_native_handle_type_t sync_handle_type =
+          (texlink_native_handle_type_t)server->frames[i]->meta.sync_handle_type;
+      if (sync_handle_type != TEXLINK_NATIVE_HANDLE_UNKNOWN &&
+          texlink_frame_send_sync_handle(client_fd, server->frames[i],
+                                         sync_handle_type) < 0) {
+        ok = 0;
+        break;
+      }
     }
     if (!ok) {
       texlink_socket_close(client_fd);
@@ -441,6 +459,7 @@ int texlink_server_end_frame(texlink_server_t *server, texlink_frame_t *frame) {
       .frame_id = frame_id,
       .buf_idx = (uint32_t)idx,
       .has_sync_fd = (sync_fd >= 0) ? 1 : 0,
+      .sync_value = server->frames[idx]->meta.sync_value,
   };
 
   for (int i = 0; i < TEXLINK_MAX_CLIENTS; i++) {
