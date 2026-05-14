@@ -12,6 +12,8 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
+  setvbuf(stdout, NULL, _IONBF, 0);
+
   if (argc > 1 && strcmp(argv[1], "--list") == 0) {
     char names[TEXLINK_NAME_MAX * 16][TEXLINK_NAME_MAX];
     int n = texlink_registry_list(names, 16);

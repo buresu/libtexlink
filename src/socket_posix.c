@@ -2,6 +2,7 @@
 #include "texlink_internal.h"
 
 #include <errno.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +11,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-int texlink_send_fds(int sock, const int *fds, int nfds) {
+int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
   char dummy = 0;
   struct iovec iov = {.iov_base = &dummy, .iov_len = 1};
 
@@ -37,7 +38,7 @@ int texlink_send_fds(int sock, const int *fds, int nfds) {
   return (ret < 0) ? -1 : 0;
 }
 
-int texlink_recv_fds(int sock, int *fds, int nfds) {
+int texlink_recv_fds(texlink_socket_t sock, int *fds, int nfds) {
   char dummy;
   struct iovec iov = {.iov_base = &dummy, .iov_len = 1};
 
@@ -70,7 +71,7 @@ int texlink_recv_fds(int sock, int *fds, int nfds) {
   return 0;
 }
 
-int texlink_socket_bind(const char *path) {
+texlink_socket_t texlink_socket_bind(const char *path) {
   int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (fd < 0)
     return -1;
@@ -90,7 +91,7 @@ int texlink_socket_bind(const char *path) {
   return fd;
 }
 
-int texlink_socket_connect(const char *path) {
+texlink_socket_t texlink_socket_connect(const char *path) {
   int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (fd < 0)
     return -1;
@@ -115,9 +116,40 @@ int texlink_socket_connect(const char *path) {
  * Splitting into two syscalls avoids the MSG_WAITALL + recvmsg interaction
  * issue on SOCK_STREAM where ancillary data can interfere with byte counting.
  */
-int texlink_send_frame(int sock, const texlink_frame_msg_t *msg, int sync_fd) {
-  ssize_t n = send(sock, msg, sizeof(*msg), MSG_NOSIGNAL);
-  if (n != (ssize_t)sizeof(*msg))
+int texlink_socket_accept(texlink_socket_t server, texlink_socket_t *out_client) {
+  int client = accept4(server, NULL, NULL, SOCK_CLOEXEC);
+  if (client < 0)
+    return -1;
+  *out_client = client;
+  return 0;
+}
+
+int texlink_socket_poll(texlink_socket_t sock, int timeout_ms) {
+  struct pollfd pfd = {.fd = sock, .events = POLLIN};
+  int ret = poll(&pfd, 1, timeout_ms);
+  if (ret <= 0 || !(pfd.revents & POLLIN))
+    return ret;
+  return 1;
+}
+
+void texlink_socket_close(texlink_socket_t sock) {
+  if (sock >= 0)
+    close(sock);
+}
+
+int texlink_socket_send(texlink_socket_t sock, const void *data, size_t size) {
+  ssize_t n = send(sock, data, size, MSG_NOSIGNAL);
+  return n == (ssize_t)size ? 0 : -1;
+}
+
+int texlink_socket_recv(texlink_socket_t sock, void *data, size_t size) {
+  ssize_t n = recv(sock, data, size, MSG_WAITALL);
+  return n == (ssize_t)size ? 0 : -1;
+}
+
+int texlink_send_frame(texlink_socket_t sock, const texlink_frame_msg_t *msg,
+                       int sync_fd) {
+  if (texlink_socket_send(sock, msg, sizeof(*msg)) != 0)
     return -1;
 
   if (msg->has_sync_fd && sync_fd >= 0)
@@ -131,11 +163,11 @@ int texlink_send_frame(int sock, const texlink_frame_msg_t *msg, int sync_fd) {
  * Step 1: recv() the frame header (MSG_WAITALL guarantees full struct).
  * Step 2: if has_sync_fd, recv the fence fd via recvmsg/SCM_RIGHTS.
  */
-int texlink_recv_frame(int sock, texlink_frame_msg_t *msg, int *sync_fd) {
+int texlink_recv_frame(texlink_socket_t sock, texlink_frame_msg_t *msg,
+                       int *sync_fd) {
   *sync_fd = -1;
 
-  ssize_t n = recv(sock, msg, sizeof(*msg), MSG_WAITALL);
-  if (n != (ssize_t)sizeof(*msg))
+  if (texlink_socket_recv(sock, msg, sizeof(*msg)) != 0)
     return -1;
 
   if (msg->has_sync_fd)

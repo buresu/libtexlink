@@ -12,19 +12,30 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 #define BUF_SIZE 65536 /* 64 KiB */
 
 static void sleep_ms(int ms) {
+#ifdef _WIN32
+  Sleep((DWORD)ms);
+#else
   struct timespec ts = {
       .tv_sec = ms / 1000,
       .tv_nsec = (ms % 1000) * 1000000L,
   };
   nanosleep(&ts, NULL);
+#endif
 }
 
 int main(int argc, char **argv) {
+  setvbuf(stdout, NULL, _IONBF, 0);
+
   const char *name = (argc > 1) ? argv[1] : "example";
 
   /* Double-buffering: two raw frames */

@@ -8,14 +8,35 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(TEXLINK_BUILD_SHARED_LIBS "Build texlink as a shared library" OFF)
 option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
-option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" ON)
-option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" ON)
+option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" OFF)
+option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" OFF)
+option(TEXLINK_WITH_GBM "Build the Linux GBM/dma-buf allocator" OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GBM REQUIRED gbm)
+set(TEXLINK_CORE_SOURCES src/session.c)
+set(TEXLINK_CORE_PRIVATE_INCLUDES src)
+set(TEXLINK_CORE_PRIVATE_LIBS)
+set(TEXLINK_CORE_PUBLIC_LIBS)
+set(TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS)
 
-add_library(texlink src/buffer.c src/socket.c src/sync.c src/session.c
-                    src/registry.c)
+if(WIN32)
+  list(APPEND TEXLINK_CORE_SOURCES src/buffer_win32.c src/socket_win32.c
+       src/sync_win32.c src/registry_win32.c src/platform_win32.c)
+else()
+  list(APPEND TEXLINK_CORE_SOURCES src/socket_posix.c src/sync_posix.c
+       src/registry_posix.c src/platform_posix.c)
+  if(TEXLINK_WITH_GBM)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GBM REQUIRED gbm)
+    list(APPEND TEXLINK_CORE_SOURCES src/buffer_posix.c)
+    list(APPEND TEXLINK_CORE_PRIVATE_INCLUDES ${GBM_INCLUDE_DIRS})
+    list(APPEND TEXLINK_CORE_PUBLIC_LIBS ${GBM_LIBRARIES} rt)
+    list(APPEND TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS ${GBM_CFLAGS_OTHER})
+  else()
+    list(APPEND TEXLINK_CORE_SOURCES src/buffer_posix_stub.c)
+  endif()
+endif()
+
+add_library(texlink ${TEXLINK_CORE_SOURCES})
 
 if(BUILD_SHARED_LIBS)
     set_target_properties(texlink PROPERTIES
@@ -28,21 +49,29 @@ target_include_directories(
   texlink
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
          $<INSTALL_INTERFACE:include>
-  PRIVATE src ${GBM_INCLUDE_DIRS})
+  PRIVATE ${TEXLINK_CORE_PRIVATE_INCLUDES})
 
-target_link_libraries(texlink PUBLIC ${GBM_LIBRARIES} rt)
+target_link_libraries(texlink PUBLIC ${TEXLINK_CORE_PUBLIC_LIBS}
+                             PRIVATE ${TEXLINK_CORE_PRIVATE_LIBS})
 
-target_compile_options(texlink PRIVATE -Wall -Wextra -Wpedantic
-                                       ${GBM_CFLAGS_OTHER})
+if(MSVC)
+  target_compile_definitions(texlink PRIVATE _CRT_SECURE_NO_WARNINGS)
+  target_compile_options(texlink PRIVATE /W4 /experimental:c11atomics)
+else()
+  target_compile_options(texlink PRIVATE -Wall -Wextra -Wpedantic
+                                         ${TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS})
+endif()
 
 set(TEXLINK_INSTALL_TARGETS texlink)
 set(TEXLINK_INSTALL_HEADERS include/texlink.h)
 
-if(TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
+if(NOT WIN32 AND TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
+  find_package(PkgConfig REQUIRED)
   pkg_check_modules(GLFW3 glfw3)
 endif()
 
-if(TEXLINK_WITH_EGL)
+if(NOT WIN32 AND TEXLINK_WITH_EGL)
+  find_package(PkgConfig REQUIRED)
   pkg_check_modules(EGL egl)
   find_package(OpenGL COMPONENTS OpenGL)
   find_package(GLEW)
@@ -88,7 +117,11 @@ if(TEXLINK_BUILD_EXAMPLES)
     add_executable(${example} examples/${example}.c)
     target_link_libraries(${example} PRIVATE texlink)
     target_include_directories(${example} PRIVATE include)
-    target_compile_options(${example} PRIVATE -Wall -Wextra)
+    if(MSVC)
+      target_compile_options(${example} PRIVATE /W4)
+    else()
+      target_compile_options(${example} PRIVATE -Wall -Wextra)
+    endif()
   endforeach()
 
   if(TARGET texlink_egl AND GLFW3_FOUND)
