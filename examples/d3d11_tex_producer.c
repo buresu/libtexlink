@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include <d3d12.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +19,48 @@ typedef struct {
   IDXGISwapChain *swapchain;
   ID3D11RenderTargetView *rtv;
 } window_target_t;
+
+typedef struct {
+  ID3D12Device *device;
+  ID3D12Fence *fence;
+  HANDLE shared_fence;
+  uint64_t value;
+} fence_bridge_t;
+
+static void release_fence_bridge(fence_bridge_t *bridge) {
+  if (bridge->shared_fence)
+    CloseHandle(bridge->shared_fence);
+  if (bridge->fence)
+    bridge->fence->lpVtbl->Release(bridge->fence);
+  if (bridge->device)
+    bridge->device->lpVtbl->Release(bridge->device);
+}
+
+static int create_fence_bridge(fence_bridge_t *bridge) {
+  HRESULT hr;
+  memset(bridge, 0, sizeof(*bridge));
+
+  hr = D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device,
+                         (void **)&bridge->device);
+  if (FAILED(hr))
+    return -1;
+  hr = bridge->device->lpVtbl->CreateFence(
+      bridge->device, 0, D3D12_FENCE_FLAG_SHARED, &IID_ID3D12Fence,
+      (void **)&bridge->fence);
+  if (FAILED(hr))
+    return -1;
+  hr = bridge->device->lpVtbl->CreateSharedHandle(
+      bridge->device, (ID3D12DeviceChild *)bridge->fence, NULL, GENERIC_ALL,
+      NULL, &bridge->shared_fence);
+  return SUCCEEDED(hr) && bridge->shared_fence ? 0 : -1;
+}
+
+static uint64_t signal_fence_bridge(fence_bridge_t *bridge) {
+  uint64_t value = ++bridge->value;
+  if (FAILED(bridge->fence->lpVtbl->Signal(bridge->fence, value)))
+    return 0;
+  return value;
+}
 
 static int create_device(ID3D11Device **out_device) {
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
@@ -156,6 +199,14 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  fence_bridge_t bridge;
+  if (create_fence_bridge(&bridge) != 0) {
+    fprintf(stderr, "D3D12 fence bridge creation failed\n");
+    device->lpVtbl->Release(device);
+    glfwTerminate();
+    return 1;
+  }
+
   texlink_d3d11_texture_frame_t *texture_frames[FRAME_COUNT] = {0};
   texlink_frame_t *frames[FRAME_COUNT] = {0};
   for (int i = 0; i < FRAME_COUNT; i++) {
@@ -177,11 +228,25 @@ int main(int argc, char **argv) {
       return 1;
     }
     frames[i] = texlink_d3d11_texture_frame_frame(texture_frames[i]);
+    texlink_native_handle_t sync_handle = {
+        .version = 1,
+        .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+        .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+        .value.ptr = bridge.shared_fence,
+    };
+    if (texlink_frame_set_sync_native_handle(frames[i], &sync_handle, 0) != 0) {
+      fprintf(stderr, "texlink_frame_set_sync_native_handle failed\n");
+      release_fence_bridge(&bridge);
+      device->lpVtbl->Release(device);
+      glfwTerminate();
+      return 1;
+    }
   }
 
   window_target_t target;
   if (create_window_target(device, glfwGetWin32Window(window), &target) != 0) {
     fprintf(stderr, "D3D11 swapchain creation failed\n");
+    release_fence_bridge(&bridge);
     device->lpVtbl->Release(device);
     glfwTerminate();
     return 1;
@@ -200,6 +265,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < FRAME_COUNT; i++)
       texlink_d3d11_texture_frame_destroy(texture_frames[i]);
     release_window_target(&target);
+    release_fence_bridge(&bridge);
     device->lpVtbl->Release(device);
     glfwTerminate();
     return 1;
@@ -218,6 +284,7 @@ int main(int argc, char **argv) {
       idx = 0;
     float phase = 0.5f + 0.5f * sinf((float)glfwGetTime() * 1.6f);
     clear_texture(texture_frames[idx], target.rtv, phase);
+    texlink_frame_set_sync_value(frame, signal_fence_bridge(&bridge));
     texlink_server_end_frame(server, frame);
     target.swapchain->lpVtbl->Present(target.swapchain, 1, 0);
 
@@ -229,6 +296,7 @@ int main(int argc, char **argv) {
   release_window_target(&target);
   for (int i = 0; i < FRAME_COUNT; i++)
     texlink_d3d11_texture_frame_destroy(texture_frames[i]);
+  release_fence_bridge(&bridge);
   device->lpVtbl->Release(device);
   glfwDestroyWindow(window);
   glfwTerminate();
