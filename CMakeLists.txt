@@ -18,31 +18,41 @@ set(TEXLINK_CORE_PRIVATE_LIBS)
 set(TEXLINK_CORE_PUBLIC_LIBS)
 set(TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS)
 
+if(TEXLINK_BUILD_SHARED_LIBS)
+  set(TEXLINK_LIBRARY_TYPE SHARED)
+else()
+  set(TEXLINK_LIBRARY_TYPE STATIC)
+endif()
+
 if(WIN32)
   list(APPEND TEXLINK_CORE_SOURCES src/buffer_win32.c src/socket_win32.c
        src/sync_win32.c src/registry_win32.c src/platform_win32.c)
 else()
   list(APPEND TEXLINK_CORE_SOURCES src/socket_posix.c src/sync_posix.c
        src/registry_posix.c src/platform_posix.c)
+  list(APPEND TEXLINK_CORE_PUBLIC_LIBS rt)
   if(TEXLINK_WITH_GBM)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GBM REQUIRED gbm)
     list(APPEND TEXLINK_CORE_SOURCES src/buffer_posix.c)
     list(APPEND TEXLINK_CORE_PRIVATE_INCLUDES ${GBM_INCLUDE_DIRS})
-    list(APPEND TEXLINK_CORE_PUBLIC_LIBS ${GBM_LIBRARIES} rt)
+    list(APPEND TEXLINK_CORE_PUBLIC_LIBS ${GBM_LIBRARIES})
     list(APPEND TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS ${GBM_CFLAGS_OTHER})
   else()
-    list(APPEND TEXLINK_CORE_SOURCES src/buffer_posix_stub.c)
+    list(APPEND TEXLINK_CORE_SOURCES src/buffer_posix_shm.c)
   endif()
 endif()
 
-add_library(texlink ${TEXLINK_CORE_SOURCES})
+add_library(texlink ${TEXLINK_LIBRARY_TYPE} ${TEXLINK_CORE_SOURCES})
 
-if(BUILD_SHARED_LIBS)
+if(TEXLINK_BUILD_SHARED_LIBS)
     set_target_properties(texlink PROPERTIES
         VERSION   ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
     )
+    if(WIN32)
+      set_target_properties(texlink PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
 endif()
 
 target_include_directories(
@@ -157,6 +167,7 @@ install(
   TARGETS ${TEXLINK_INSTALL_TARGETS}
   EXPORT texlink-targets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 install(FILES ${TEXLINK_INSTALL_HEADERS}

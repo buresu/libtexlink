@@ -55,6 +55,10 @@ static uint64_t dma_buf_sync_flags(uint32_t access) {
   return DMA_BUF_SYNC_READ;
 }
 
+static int frame_needs_dma_buf_sync(texlink_frame_t *frame) {
+  return frame->handle.type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD;
+}
+
 static int map_prot(uint32_t flags) {
   int prot = 0;
   if (flags & TEXLINK_MAP_READ)
@@ -152,11 +156,13 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
   if (ret != 0)
     return ret;
 
-  struct dma_buf_sync sync = {
-      .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(desc->access),
-  };
-  if (ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync) < 0)
-    return -errno;
+  if (frame_needs_dma_buf_sync(frame)) {
+    struct dma_buf_sync sync = {
+        .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(desc->access),
+    };
+    if (ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync) < 0)
+      return -errno;
+  }
 
   frame->active_access = desc->access;
   frame->active_access_offset = desc->offset;
@@ -184,10 +190,13 @@ int texlink_frame_cpu_end(texlink_frame_t *frame,
       access_size != frame->active_access_size)
     return -EINVAL;
 
-  struct dma_buf_sync sync = {
-      .flags = DMA_BUF_SYNC_END | dma_buf_sync_flags(frame->active_access),
-  };
-  ret = ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
+  ret = 0;
+  if (frame_needs_dma_buf_sync(frame)) {
+    struct dma_buf_sync sync = {
+        .flags = DMA_BUF_SYNC_END | dma_buf_sync_flags(frame->active_access),
+    };
+    ret = ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync);
+  }
   frame->active_access = 0;
   frame->active_access_offset = 0;
   frame->active_access_size = 0;
