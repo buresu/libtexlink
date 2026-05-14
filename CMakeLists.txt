@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(TEXLINK_BUILD_SHARED_LIBS "Build texlink as a shared library" OFF)
 option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" OFF)
+option(TEXLINK_WITH_WGL "Build the WGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" OFF)
 option(TEXLINK_WITH_GBM "Build the Linux GBM/dma-buf allocator" OFF)
 
@@ -75,7 +76,8 @@ endif()
 set(TEXLINK_INSTALL_TARGETS texlink)
 set(TEXLINK_INSTALL_HEADERS include/texlink.h)
 
-if(TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
+if(TEXLINK_BUILD_EXAMPLES
+   AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN))
   if(WIN32)
     find_package(glfw3 CONFIG QUIET)
     if(glfw3_FOUND)
@@ -115,8 +117,8 @@ if(TEXLINK_BUILD_EXAMPLES AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_VULKAN))
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GLFW3 glfw3)
   endif()
-  if(TEXLINK_WITH_VULKAN AND NOT GLFW3_FOUND)
-    message(STATUS "GLFW3 not found; skipping Vulkan example programs")
+  if((TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN) AND NOT GLFW3_FOUND)
+    message(STATUS "GLFW3 not found; skipping WGL/Vulkan example programs")
   endif()
 endif()
 
@@ -135,7 +137,7 @@ if(TEXLINK_WITH_EGL
    AND EGL_FOUND
    AND OpenGL_OpenGL_FOUND
    AND GLEW_FOUND)
-  add_library(texlink_egl src/egl.c)
+  add_library(texlink_egl src/backend_egl.c)
   target_link_libraries(
     texlink_egl
     PUBLIC texlink ${EGL_LIBRARIES} OpenGL::OpenGL
@@ -151,8 +153,25 @@ if(TEXLINK_WITH_EGL
   list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_egl.h)
 endif()
 
+if(WIN32 AND TEXLINK_WITH_WGL)
+  add_library(texlink_wgl src/backend_wgl.c)
+  target_link_libraries(texlink_wgl PUBLIC texlink PRIVATE opengl32 d3d11 dxgi
+                                           dxguid)
+  target_include_directories(
+    texlink_wgl PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                       $<INSTALL_INTERFACE:include>)
+  if(MSVC)
+    target_compile_definitions(texlink_wgl PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(texlink_wgl PRIVATE /W4)
+  else()
+    target_compile_options(texlink_wgl PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_wgl)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_wgl.h)
+endif()
+
 if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
-  add_library(texlink_vulkan src/vulkan.c)
+  add_library(texlink_vulkan src/backend_vulkan.c)
   target_link_libraries(texlink_vulkan PUBLIC texlink Vulkan::Vulkan)
   target_include_directories(
     texlink_vulkan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -189,6 +208,34 @@ if(TEXLINK_BUILD_EXAMPLES)
       target_compile_options(
         ${example} PRIVATE -Wall -Wextra ${GLFW3_CFLAGS_OTHER}
                            ${EGL_CFLAGS_OTHER})
+    endforeach()
+  endif()
+
+  if(TARGET texlink_wgl AND GLFW3_FOUND)
+    foreach(example wgl_tex_producer wgl_tex_consumer)
+      add_executable(${example} examples/${example}.c)
+      target_link_libraries(${example} PRIVATE texlink_wgl)
+      if(TEXLINK_GLFW_TARGET)
+        target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES} user32
+                                                 gdi32 shell32)
+        if(GLFW3_RUNTIME)
+          add_custom_command(
+            TARGET ${example}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GLFW3_RUNTIME}"
+                    $<TARGET_FILE_DIR:${example}>)
+        endif()
+      endif()
+      target_include_directories(${example} PRIVATE include ${GLFW3_INCLUDE_DIRS})
+      if(MSVC)
+        target_compile_definitions(${example} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${example} PRIVATE /W4)
+      else()
+        target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic
+                                                  ${GLFW3_CFLAGS_OTHER})
+      endif()
     endforeach()
   endif()
 

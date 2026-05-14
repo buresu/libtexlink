@@ -87,12 +87,21 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type) {
   HANDLE handle = NULL;
-  if (texlink_recv_ipc_handles(sock, &handle, 1) < 0)
-    return -1;
+  if (type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
+    uintptr_t wire = 0;
+    if (texlink_socket_recv(sock, &wire, sizeof(wire)) != 0)
+      return -1;
+    handle = (HANDLE)wire;
+  } else {
+    if (texlink_recv_ipc_handles(sock, &handle, 1) < 0)
+      return -1;
+  }
 
   frame->handle.version = 1;
   frame->handle.type = type;
-  frame->handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+  frame->handle.flags = type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE
+                            ? TEXLINK_NATIVE_HANDLE_FLAG_BORROWED
+                            : TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
   frame->handle.value.ptr = handle;
   frame->win32_handle = handle;
   frame->meta.handle_type = (uint32_t)type;
@@ -107,6 +116,10 @@ int texlink_frame_send_native_handle(texlink_socket_t sock,
   if (texlink_frame_get_native_handle(frame, type, &handle) != 0 ||
       !texlink_native_handle_type_is_ipc(handle.type))
     return -1;
+  if (type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
+    uintptr_t wire = (uintptr_t)handle.value.ptr;
+    return texlink_socket_send(sock, &wire, sizeof(wire));
+  }
   texlink_ipc_handle_t ipc_handle = (HANDLE)handle.value.ptr;
   return texlink_send_ipc_handles(sock, &ipc_handle, 1);
 }

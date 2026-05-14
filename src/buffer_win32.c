@@ -131,7 +131,8 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
     return NULL;
 
   HANDLE handle = (HANDLE)desc->handle.value.ptr;
-  if (!(desc->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED)) {
+  if (!(desc->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+      desc->handle.type != TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
     HANDLE dup_handle = NULL;
     if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(),
                          &dup_handle, 0, FALSE, DUPLICATE_SAME_ACCESS))
@@ -146,7 +147,9 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
   }
 
   frame_set_handle(frame, desc->handle.type, handle,
-                   TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
+                   desc->handle.type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE
+                       ? desc->handle.flags
+                       : TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
   frame->sync_fd = -1;
   frame->index = -1;
   frame->map_base = NULL;
@@ -237,17 +240,21 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
   if (ret != 0)
     return ret;
 
-  HANDLE dup_handle = NULL;
-  if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)borrowed.value.ptr,
-                       GetCurrentProcess(), &dup_handle, 0, FALSE,
-                       DUPLICATE_SAME_ACCESS))
-    return -EIO;
+  HANDLE dup_handle = (HANDLE)borrowed.value.ptr;
+  uint32_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  if (type != TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
+    if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)borrowed.value.ptr,
+                         GetCurrentProcess(), &dup_handle, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS))
+      return -EIO;
+    flags =
+        TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
+  }
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->version = 1;
   out_handle->type = type;
-  out_handle->flags =
-      TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
+  out_handle->flags = flags;
   out_handle->value.ptr = dup_handle;
   return 0;
 }
