@@ -87,11 +87,11 @@ static void destroy_vk_image(texlink_vk_image_t *image) {
   image->memory = VK_NULL_HANDLE;
 }
 
-static texlink_vk_image_t *
-import_frame(VkDevice device,
-             const VkPhysicalDeviceMemoryProperties *memory_properties,
-             texlink_frame_t *frame, VkFormat format, VkImageUsageFlags usage,
-             VkImageLayout initial_layout) {
+static texlink_vk_image_t *import_frame_with_handle_type(
+    VkDevice device, const VkPhysicalDeviceMemoryProperties *memory_properties,
+    texlink_frame_t *frame, VkFormat format, VkImageUsageFlags usage,
+    VkImageLayout initial_layout, texlink_native_handle_type_t native_type,
+    VkExternalMemoryHandleTypeFlagBits vk_handle_type) {
   if (!device || !memory_properties || !frame)
     return NULL;
 
@@ -101,11 +101,6 @@ import_frame(VkDevice device,
   if (format == VK_FORMAT_UNDEFINED)
     return NULL;
 
-  texlink_native_handle_type_t native_type =
-      meta.handle_type ? (texlink_native_handle_type_t)meta.handle_type
-                       : vk_default_memory_handle_type();
-  VkExternalMemoryHandleTypeFlagBits vk_handle_type =
-      vk_external_memory_handle_type(native_type);
   if (!vk_handle_type)
     return NULL;
 
@@ -227,6 +222,33 @@ err:
   destroy_vk_image(image);
   free(image);
   return NULL;
+}
+
+static texlink_vk_image_t *
+import_frame(VkDevice device,
+             const VkPhysicalDeviceMemoryProperties *memory_properties,
+             texlink_frame_t *frame, VkFormat format, VkImageUsageFlags usage,
+             VkImageLayout initial_layout) {
+  if (!frame)
+    return NULL;
+  texlink_meta_t meta = texlink_frame_meta(frame);
+  texlink_native_handle_type_t native_type =
+      meta.handle_type ? (texlink_native_handle_type_t)meta.handle_type
+                       : vk_default_memory_handle_type();
+  VkExternalMemoryHandleTypeFlagBits vk_handle_type =
+      vk_external_memory_handle_type(native_type);
+
+  texlink_vk_image_t *image = import_frame_with_handle_type(
+      device, memory_properties, frame, format, usage, initial_layout,
+      native_type, vk_handle_type);
+#ifdef _WIN32
+  if (!image && native_type == TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE) {
+    image = import_frame_with_handle_type(
+        device, memory_properties, frame, format, usage, initial_layout,
+        native_type, VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT);
+  }
+#endif
+  return image;
 }
 
 texlink_vk_image_t *

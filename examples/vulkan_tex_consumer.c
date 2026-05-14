@@ -9,9 +9,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <d3d12.h>
+#include <windows.h>
+#endif
+
 #define WIDTH 512
 #define HEIGHT 512
-#define MAX_IMAGES 2
+#define MAX_IMAGES 3
 #define MAX_SC_IMGS 8
 
 typedef struct {
@@ -37,7 +43,31 @@ typedef struct {
 typedef struct {
   texlink_vk_image_t *image;
   VkImageLayout current_layout;
+#ifdef _WIN32
+  ID3D12Fence *sync_fence;
+#endif
 } ImportedImage;
+
+#ifdef _WIN32
+static int wait_shared_fence(ID3D12Fence *fence, uint64_t value) {
+  if (!fence || value == 0)
+    return 0;
+  if (fence->lpVtbl->GetCompletedValue(fence) >= value)
+    return 0;
+  HANDLE event_handle = CreateEventA(NULL, FALSE, FALSE, NULL);
+  if (!event_handle)
+    return -1;
+  HRESULT hr =
+      fence->lpVtbl->SetEventOnCompletion(fence, value, event_handle);
+  if (FAILED(hr)) {
+    CloseHandle(event_handle);
+    return -1;
+  }
+  WaitForSingleObject(event_handle, INFINITE);
+  CloseHandle(event_handle);
+  return 0;
+}
+#endif
 
 static void vk_check(VkResult r, const char *msg) {
   if (r != VK_SUCCESS) {
@@ -221,7 +251,7 @@ static void create_swapchain(VulkanContext *ctx) {
  * Blit the shared image into the next swapchain image and present.
  *
  * Shared image layout transitions:
- *   current_layout → TRANSFER_SRC_OPTIMAL (blit) → GENERAL
+ *   current_layout -> TRANSFER_SRC_OPTIMAL (blit) -> GENERAL
  *
  * The producer leaves shared images in GENERAL; we transition from there.
  * On the very first frame current_layout is UNDEFINED (discard is fine because
@@ -245,7 +275,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
 
   VkImageSubresourceRange full = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-  /* Transition shared image → TRANSFER_SRC_OPTIMAL */
+  /* Transition shared image -> TRANSFER_SRC_OPTIMAL */
   VkImageMemoryBarrier shared_to_src = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .oldLayout = img->current_layout,
@@ -258,7 +288,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
   };
 
-  /* Transition swapchain image UNDEFINED → TRANSFER_DST_OPTIMAL */
+  /* Transition swapchain image UNDEFINED -> TRANSFER_DST_OPTIMAL */
   VkImageMemoryBarrier sc_to_dst = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -293,7 +323,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
                  ctx->sc_images[sc_idx], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                  1, &region, VK_FILTER_NEAREST);
 
-  /* Transition swapchain image → PRESENT_SRC_KHR */
+  /* Transition swapchain image -> PRESENT_SRC_KHR */
   VkImageMemoryBarrier sc_to_present = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -306,7 +336,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .dstAccessMask = 0,
   };
 
-  /* Transition shared image → GENERAL for next producer write */
+  /* Transition shared image -> GENERAL for next producer write */
   VkImageMemoryBarrier shared_to_general = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -379,10 +409,11 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
-  printf("Connecting to 'texshare'...\n");
+  const char *name = "d3d_interop";
+  printf("Connecting to '%s'...\n", name);
   texlink_client_desc_t desc = {
       .version = 1,
-      .name = "texshare",
+      .name = name,
       .backend = TEXLINK_BACKEND_VULKAN,
       .timeout_ms = 5000,
   };
@@ -397,6 +428,12 @@ int main(void) {
 
   ImportedImage images[MAX_IMAGES];
   memset(images, 0, sizeof(images));
+
+#ifdef _WIN32
+  ID3D12Device *sync_device = NULL;
+  D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device,
+                    (void **)&sync_device);
+#endif
 
   uint32_t frame_count = texlink_client_frame_count(client);
   if (frame_count > MAX_IMAGES)
@@ -417,6 +454,19 @@ int main(void) {
       fprintf(stderr, "texlink_vk_image_import failed for frame %u\n", i);
       return 1;
     }
+#ifdef _WIN32
+    if (sync_device) {
+      texlink_native_handle_t sync_handle;
+      uint64_t sync_value;
+      if (texlink_frame_get_sync_native_handle(
+              frame, TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE, &sync_handle,
+              &sync_value) == 0) {
+        sync_device->lpVtbl->OpenSharedHandle(
+            sync_device, (HANDLE)sync_handle.value.ptr, &IID_ID3D12Fence,
+            (void **)&images[i].sync_fence);
+      }
+    }
+#endif
   }
 
   while (!glfwWindowShouldClose(window)) {
@@ -426,7 +476,19 @@ int main(void) {
       break;
     }
     int idx = texlink_frame_index(frame);
+    if (idx < 0 || (uint32_t)idx >= frame_count) {
+      texlink_client_release_frame(client, frame);
+      continue;
+    }
 
+#ifdef _WIN32
+    if (wait_shared_fence(images[idx].sync_fence,
+                          texlink_frame_sync_value(frame)) != 0) {
+      fprintf(stderr, "D3D12 fence wait failed\n");
+      texlink_client_release_frame(client, frame);
+      break;
+    }
+#endif
     display_frame(&vk, &images[idx], &meta);
 
     texlink_client_release_frame(client, frame);
@@ -437,8 +499,16 @@ int main(void) {
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < MAX_IMAGES; i++) {
+#ifdef _WIN32
+    if (images[i].sync_fence)
+      images[i].sync_fence->lpVtbl->Release(images[i].sync_fence);
+#endif
     texlink_vk_image_destroy(images[i].image);
   }
+#ifdef _WIN32
+  if (sync_device)
+    sync_device->lpVtbl->Release(sync_device);
+#endif
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);
   vkDestroySemaphore(vk.device, vk.render_finished, NULL);

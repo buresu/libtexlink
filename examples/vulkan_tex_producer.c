@@ -8,6 +8,14 @@
 
 #include <texlink_vulkan.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <d3d11.h>
+#include <d3d11_1.h>
+#include <dxgi1_2.h>
+#include <windows.h>
+#endif
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +68,108 @@ typedef struct {
 
 typedef struct {
   texlink_vk_image_t *image;
+  texlink_frame_t *frame;
+#ifdef _WIN32
+  ID3D11Device *d3d11_device;
+  ID3D11DeviceContext *d3d11_context;
+  ID3D11Texture2D *d3d11_texture;
+  HANDLE shared_handle;
+#endif
 } SharedImage;
+
+#ifdef _WIN32
+static void destroy_shared_image(SharedImage *img) {
+  texlink_vk_image_destroy(img->image);
+  if (img->frame)
+    texlink_frame_destroy(img->frame);
+  if (img->shared_handle)
+    CloseHandle(img->shared_handle);
+  if (img->d3d11_texture)
+    img->d3d11_texture->lpVtbl->Release(img->d3d11_texture);
+  if (img->d3d11_context)
+    img->d3d11_context->lpVtbl->Release(img->d3d11_context);
+  if (img->d3d11_device)
+    img->d3d11_device->lpVtbl->Release(img->d3d11_device);
+  memset(img, 0, sizeof(*img));
+}
+
+static int create_d3d11_shared_frame(SharedImage *img) {
+  UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+  D3D_FEATURE_LEVEL levels[] = {
+      D3D_FEATURE_LEVEL_11_1,
+      D3D_FEATURE_LEVEL_11_0,
+      D3D_FEATURE_LEVEL_10_1,
+      D3D_FEATURE_LEVEL_10_0,
+  };
+  D3D_FEATURE_LEVEL selected = 0;
+  D3D11_TEXTURE2D_DESC td;
+  IDXGIResource1 *resource = NULL;
+  HRESULT hr;
+
+  hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, levels,
+                         (UINT)(sizeof(levels) / sizeof(levels[0])),
+                         D3D11_SDK_VERSION, &img->d3d11_device, &selected,
+                         &img->d3d11_context);
+  if (FAILED(hr))
+    return -1;
+
+  memset(&td, 0, sizeof(td));
+  td.Width = WIDTH;
+  td.Height = HEIGHT;
+  td.MipLevels = 1;
+  td.ArraySize = 1;
+  td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  td.SampleDesc.Count = 1;
+  td.Usage = D3D11_USAGE_DEFAULT;
+  td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+  td.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+  hr = img->d3d11_device->lpVtbl->CreateTexture2D(img->d3d11_device, &td, NULL,
+                                                  &img->d3d11_texture);
+  if (FAILED(hr)) {
+    td.MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
+    hr = img->d3d11_device->lpVtbl->CreateTexture2D(
+        img->d3d11_device, &td, NULL, &img->d3d11_texture);
+    if (FAILED(hr))
+      return -1;
+  }
+
+  hr = img->d3d11_texture->lpVtbl->QueryInterface(
+      img->d3d11_texture, &IID_IDXGIResource1, (void **)&resource);
+  if (FAILED(hr) || !resource)
+    return -1;
+  hr = resource->lpVtbl->CreateSharedHandle(resource, NULL, GENERIC_ALL, NULL,
+                                            &img->shared_handle);
+  resource->lpVtbl->Release(resource);
+  if (FAILED(hr) || !img->shared_handle)
+    return -1;
+
+  texlink_native_handle_t handle = {
+      .version = 1,
+      .type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
+      .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+      .value.ptr = img->shared_handle,
+  };
+  img->frame = texlink_frame_create_from_native_handle(
+      &(texlink_frame_native_desc_t){
+          .version = 1,
+          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .width = WIDTH,
+          .height = HEIGHT,
+          .depth = 1,
+          .format = TEXLINK_FRAME_FORMAT_ARGB8888,
+          .stride = WIDTH * 4,
+          .size = WIDTH * HEIGHT * 4,
+          .backend = TEXLINK_BACKEND_VULKAN,
+          .handle = handle,
+      });
+  return img->frame ? 0 : -1;
+}
+#else
+static void destroy_shared_image(SharedImage *img) {
+  texlink_vk_image_destroy(img->image);
+  memset(img, 0, sizeof(*img));
+}
+#endif
 
 static void vk_check(VkResult r, const char *msg) {
   if (r != VK_SUCCESS) {
@@ -252,7 +361,7 @@ static void submit_and_wait(VulkanContext *ctx) {
 
 /*
  * Clear the shared image with an animated solid color.
- * Transitions: UNDEFINED → TRANSFER_DST_OPTIMAL (clear) → GENERAL
+ * Transitions: UNDEFINED -> TRANSFER_DST_OPTIMAL (clear) -> GENERAL
  */
 static void render_frame(VulkanContext *ctx, SharedImage *img, float t) {
   VkImage image = texlink_vk_image_handle(img->image);
@@ -442,47 +551,49 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
-  SharedImage images[2] = {
-      {
-          .image =
-              texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
-                  .version = 1,
-                  .device = vk.device,
-                  .memory_properties = vk.mem_props,
-                  .width = WIDTH,
-                  .height = HEIGHT,
-                  .format = TEXLINK_FRAME_FORMAT_ARGB8888,
-                  .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-              }),
-      },
-      {
-          .image =
-              texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
-                  .version = 1,
-                  .device = vk.device,
-                  .memory_properties = vk.mem_props,
-                  .width = WIDTH,
-                  .height = HEIGHT,
-                  .format = TEXLINK_FRAME_FORMAT_ARGB8888,
-                  .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-              }),
-      },
-  };
-  texlink_frame_t *frames[2] = {
-      texlink_vk_image_frame_frame(images[0].image),
-      texlink_vk_image_frame_frame(images[1].image),
-  };
+  SharedImage images[2];
+  memset(images, 0, sizeof(images));
+  texlink_frame_t *frames[2] = {0};
+  for (int i = 0; i < 2; i++) {
+#ifdef _WIN32
+    if (create_d3d11_shared_frame(&images[i]) != 0) {
+      fprintf(stderr, "D3D11 shared texture creation failed\n");
+      return 1;
+    }
+    images[i].image = texlink_vk_image_import(&(texlink_vk_import_desc_t){
+        .version = 1,
+        .device = vk.device,
+        .memory_properties = vk.mem_props,
+        .frame = images[i].frame,
+        .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+    });
+#else
+    images[i].image =
+        texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
+            .version = 1,
+            .device = vk.device,
+            .memory_properties = vk.mem_props,
+            .width = WIDTH,
+            .height = HEIGHT,
+            .format = TEXLINK_FRAME_FORMAT_ARGB8888,
+            .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                     VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        });
+    images[i].frame = texlink_vk_image_frame_frame(images[i].image);
+#endif
+    frames[i] = images[i].frame;
+  }
   if (!frames[0] || !frames[1]) {
     fprintf(stderr, "texlink_vk_image_frame_create failed\n");
     return 1;
   }
 
-  printf("Serving 'texshare'...\n");
+  const char *name = "d3d_interop";
+  printf("Serving '%s'...\n", name);
   texlink_server_desc_t desc = {
       .version = 1,
-      .name = "texshare",
+      .name = name,
       .backend = TEXLINK_BACKEND_VULKAN,
       .frames = frames,
       .frame_count = 2,
@@ -517,7 +628,7 @@ int main(void) {
   vkDeviceWaitIdle(vk.device);
 
   for (int i = 0; i < 2; i++) {
-    texlink_vk_image_destroy(images[i].image);
+    destroy_shared_image(&images[i]);
   }
 
   vkDestroySemaphore(vk.device, vk.image_available, NULL);
