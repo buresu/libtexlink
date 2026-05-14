@@ -134,7 +134,7 @@ static void clear_texture(texlink_d3d11_texture_frame_t *texture_frame,
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d11_example";
+  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
@@ -167,7 +167,7 @@ int main(int argc, char **argv) {
             .height = HEIGHT,
             .format = TEXLINK_FRAME_FORMAT_ARGB8888,
             .bind_flags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE,
-            .misc_flags = D3D11_RESOURCE_MISC_SHARED,
+            .misc_flags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE,
         });
     if (!texture_frames[i]) {
       fprintf(stderr, "texlink_d3d11_texture_frame_create failed: %s\n",

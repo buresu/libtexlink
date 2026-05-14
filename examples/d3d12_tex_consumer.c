@@ -301,7 +301,7 @@ done:
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d12_example";
+  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");

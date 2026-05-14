@@ -15,6 +15,7 @@
 typedef struct {
   IDXGISwapChain *swapchain;
   ID3D11Texture2D *backbuffer;
+  ID3D11RenderTargetView *rtv;
 } window_target_t;
 
 static int create_device(ID3D11Device **out_device) {
@@ -38,6 +39,8 @@ static int create_device(ID3D11Device **out_device) {
 }
 
 static void release_window_target(window_target_t *target) {
+  if (target->rtv)
+    target->rtv->lpVtbl->Release(target->rtv);
   if (target->backbuffer)
     target->backbuffer->lpVtbl->Release(target->backbuffer);
   if (target->swapchain)
@@ -82,6 +85,10 @@ static int create_window_target(ID3D11Device *device, HWND hwnd,
   hr = out->swapchain->lpVtbl->GetBuffer(out->swapchain, 0,
                                          &IID_ID3D11Texture2D,
                                          (void **)&out->backbuffer);
+  if (FAILED(hr))
+    goto done;
+  hr = device->lpVtbl->CreateRenderTargetView(
+      device, (ID3D11Resource *)out->backbuffer, NULL, &out->rtv);
 
 done:
   if (factory)
@@ -90,19 +97,67 @@ done:
     adapter->lpVtbl->Release(adapter);
   if (dxgi_device)
     dxgi_device->lpVtbl->Release(dxgi_device);
-  return SUCCEEDED(hr) && out->swapchain && out->backbuffer ? 0 : -1;
+  return SUCCEEDED(hr) && out->swapchain && out->backbuffer && out->rtv ? 0
+                                                                        : -1;
 }
 
-static void present_texture(texlink_d3d11_texture_frame_t *texture_frame,
-                            window_target_t *target) {
+static int read_first_pixel(texlink_d3d11_texture_frame_t *texture_frame,
+                            unsigned char out_bgra[4]) {
   ID3D11Device *device = texlink_d3d11_texture_frame_device(texture_frame);
+  ID3D11Texture2D *texture =
+      texlink_d3d11_texture_frame_texture(texture_frame);
   ID3D11DeviceContext *context = NULL;
+  D3D11_TEXTURE2D_DESC desc;
+  ID3D11Texture2D *staging = NULL;
+  D3D11_MAPPED_SUBRESOURCE mapped;
+  int ret = -1;
+
+  texture->lpVtbl->GetDesc(texture, &desc);
+  desc.BindFlags = 0;
+  desc.MiscFlags = 0;
+  desc.Usage = D3D11_USAGE_STAGING;
+  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+  device->lpVtbl->GetImmediateContext(device, &context);
+  if (!context)
+    return -1;
+  if (FAILED(device->lpVtbl->CreateTexture2D(device, &desc, NULL, &staging)))
+    goto done;
+
+  context->lpVtbl->CopyResource(context, (ID3D11Resource *)staging,
+                                (ID3D11Resource *)texture);
+  if (SUCCEEDED(context->lpVtbl->Map(context, (ID3D11Resource *)staging, 0,
+                                    D3D11_MAP_READ, 0, &mapped))) {
+    const unsigned char *p = mapped.pData;
+    out_bgra[0] = p[0];
+    out_bgra[1] = p[1];
+    out_bgra[2] = p[2];
+    out_bgra[3] = p[3];
+    context->lpVtbl->Unmap(context, (ID3D11Resource *)staging, 0);
+    ret = 0;
+  }
+
+done:
+  if (staging)
+    staging->lpVtbl->Release(staging);
+  context->lpVtbl->Release(context);
+  return ret;
+}
+
+static void present_color(ID3D11Device *device, window_target_t *target,
+                          const unsigned char bgra[4]) {
+  ID3D11DeviceContext *context = NULL;
+  float color[4] = {
+      bgra[2] / 255.0f,
+      bgra[1] / 255.0f,
+      bgra[0] / 255.0f,
+      bgra[3] / 255.0f,
+  };
+
   device->lpVtbl->GetImmediateContext(device, &context);
   if (!context)
     return;
-  context->lpVtbl->CopyResource(
-      context, (ID3D11Resource *)target->backbuffer,
-      (ID3D11Resource *)texlink_d3d11_texture_frame_texture(texture_frame));
+  context->lpVtbl->ClearRenderTargetView(context, target->rtv, color);
   context->lpVtbl->Flush(context);
   context->lpVtbl->Release(context);
   target->swapchain->lpVtbl->Present(target->swapchain, 1, 0);
@@ -110,7 +165,7 @@ static void present_texture(texlink_d3d11_texture_frame_t *texture_frame,
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d11_example";
+  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
@@ -189,7 +244,9 @@ int main(int argc, char **argv) {
     if (idx < 0 || (uint32_t)idx >= frame_count)
       idx = 0;
 
-    present_texture(texture_frames[idx], &target);
+    unsigned char bgra[4] = {0};
+    read_first_pixel(texture_frames[idx], bgra);
+    present_color(device, &target, bgra);
     texlink_client_release_frame(client, frame);
     glfwPollEvents();
   }

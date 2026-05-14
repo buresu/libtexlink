@@ -220,7 +220,7 @@ static int clear_resource(d3d12_context_t *ctx, ID3D12Resource *resource,
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d12_example";
+  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
