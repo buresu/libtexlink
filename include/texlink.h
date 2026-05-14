@@ -13,6 +13,8 @@ typedef enum {
   TEXLINK_BACKEND_EGL,
   TEXLINK_BACKEND_WGL,
   TEXLINK_BACKEND_VULKAN,
+  TEXLINK_BACKEND_D3D11,
+  TEXLINK_BACKEND_D3D12,
 } texlink_backend_t;
 
 typedef enum {

@@ -11,6 +11,8 @@ option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_WGL "Build the WGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" OFF)
+option(TEXLINK_WITH_D3D11 "Build the Direct3D 11 texlink backend utility" OFF)
+option(TEXLINK_WITH_D3D12 "Build the Direct3D 12 texlink backend utility" OFF)
 option(TEXLINK_WITH_GBM "Build the Linux GBM/dma-buf allocator" OFF)
 
 set(TEXLINK_CORE_SOURCES src/session.c)
@@ -77,7 +79,8 @@ set(TEXLINK_INSTALL_TARGETS texlink)
 set(TEXLINK_INSTALL_HEADERS include/texlink.h)
 
 if(TEXLINK_BUILD_EXAMPLES
-   AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN))
+   AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN
+        OR TEXLINK_WITH_D3D11 OR TEXLINK_WITH_D3D12))
   if(WIN32)
     find_package(glfw3 CONFIG QUIET)
     if(glfw3_FOUND)
@@ -117,8 +120,10 @@ if(TEXLINK_BUILD_EXAMPLES
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GLFW3 glfw3)
   endif()
-  if((TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN) AND NOT GLFW3_FOUND)
-    message(STATUS "GLFW3 not found; skipping WGL/Vulkan example programs")
+  if((TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN OR TEXLINK_WITH_D3D11
+      OR TEXLINK_WITH_D3D12)
+     AND NOT GLFW3_FOUND)
+    message(STATUS "GLFW3 not found; skipping windowed GPU example programs")
   endif()
 endif()
 
@@ -168,6 +173,38 @@ if(WIN32 AND TEXLINK_WITH_WGL)
   endif()
   list(APPEND TEXLINK_INSTALL_TARGETS texlink_wgl)
   list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_wgl.h)
+endif()
+
+if(WIN32 AND TEXLINK_WITH_D3D11)
+  add_library(texlink_d3d11 src/backend_d3d11.c)
+  target_link_libraries(texlink_d3d11 PUBLIC texlink PRIVATE d3d11 dxgi dxguid)
+  target_include_directories(
+    texlink_d3d11 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                         $<INSTALL_INTERFACE:include>)
+  if(MSVC)
+    target_compile_definitions(texlink_d3d11 PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(texlink_d3d11 PRIVATE /W4)
+  else()
+    target_compile_options(texlink_d3d11 PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_d3d11)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_d3d11.h)
+endif()
+
+if(WIN32 AND TEXLINK_WITH_D3D12)
+  add_library(texlink_d3d12 src/backend_d3d12.c)
+  target_link_libraries(texlink_d3d12 PUBLIC texlink PRIVATE d3d12 dxgi dxguid)
+  target_include_directories(
+    texlink_d3d12 PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                         $<INSTALL_INTERFACE:include>)
+  if(MSVC)
+    target_compile_definitions(texlink_d3d12 PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(texlink_d3d12 PRIVATE /W4)
+  else()
+    target_compile_options(texlink_d3d12 PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_d3d12)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_d3d12.h)
 endif()
 
 if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
@@ -235,6 +272,60 @@ if(TEXLINK_BUILD_EXAMPLES)
       else()
         target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic
                                                   ${GLFW3_CFLAGS_OTHER})
+      endif()
+    endforeach()
+  endif()
+
+  if(TARGET texlink_d3d11 AND GLFW3_FOUND)
+    foreach(example d3d11_tex_producer d3d11_tex_consumer)
+      add_executable(${example} examples/${example}.c)
+      target_link_libraries(${example} PRIVATE texlink_d3d11)
+      if(TEXLINK_GLFW_TARGET)
+        target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES} user32
+                                                 gdi32 shell32)
+        if(GLFW3_RUNTIME)
+          add_custom_command(
+            TARGET ${example}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GLFW3_RUNTIME}"
+                    $<TARGET_FILE_DIR:${example}>)
+        endif()
+      endif()
+      target_include_directories(${example} PRIVATE include ${GLFW3_INCLUDE_DIRS})
+      if(MSVC)
+        target_compile_definitions(${example} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${example} PRIVATE /W4)
+      else()
+        target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
+      endif()
+    endforeach()
+  endif()
+
+  if(TARGET texlink_d3d12 AND GLFW3_FOUND)
+    foreach(example d3d12_tex_producer d3d12_tex_consumer)
+      add_executable(${example} examples/${example}.c)
+      target_link_libraries(${example} PRIVATE texlink_d3d12)
+      if(TEXLINK_GLFW_TARGET)
+        target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES} user32
+                                                 gdi32 shell32)
+        if(GLFW3_RUNTIME)
+          add_custom_command(
+            TARGET ${example}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${GLFW3_RUNTIME}"
+                    $<TARGET_FILE_DIR:${example}>)
+        endif()
+      endif()
+      target_include_directories(${example} PRIVATE include ${GLFW3_INCLUDE_DIRS})
+      if(MSVC)
+        target_compile_definitions(${example} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${example} PRIVATE /W4)
+      else()
+        target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
       endif()
     endforeach()
   endif()
