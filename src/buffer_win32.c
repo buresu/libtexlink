@@ -194,6 +194,14 @@ int texlink_frame_should_flip_y(texlink_backend_t producer,
     return 1;
   if (producer == TEXLINK_BACKEND_VULKAN && consumer == TEXLINK_BACKEND_EGL)
     return 1;
+  if (producer == TEXLINK_BACKEND_WGL &&
+      (consumer == TEXLINK_BACKEND_D3D11 ||
+       consumer == TEXLINK_BACKEND_D3D12))
+    return 1;
+  if ((producer == TEXLINK_BACKEND_D3D11 ||
+       producer == TEXLINK_BACKEND_D3D12) &&
+      consumer == TEXLINK_BACKEND_WGL)
+    return 1;
   return 0;
 }
 

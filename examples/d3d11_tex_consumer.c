@@ -5,18 +5,48 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include <d3d12.h>
+#include <d3dcompiler.h>
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
 
 #define MAX_FRAMES 3
-#define WIDTH 256
-#define HEIGHT 256
+#define WIDTH 512
+#define HEIGHT 512
 
 typedef struct {
   IDXGISwapChain *swapchain;
   ID3D11Texture2D *backbuffer;
   ID3D11RenderTargetView *rtv;
 } window_target_t;
+
+typedef struct {
+  ID3D11VertexShader *vs;
+  ID3D11PixelShader *ps;
+  ID3D11SamplerState *sampler;
+  ID3D11Buffer *constants;
+  ID3D11ShaderResourceView *srvs[MAX_FRAMES];
+} render_resources_t;
+
+static int wait_shared_fence(ID3D12Fence *fence, uint64_t value) {
+  if (!fence || value == 0)
+    return 0;
+  if (fence->lpVtbl->GetCompletedValue(fence) >= value)
+    return 0;
+  HANDLE event_handle = CreateEventA(NULL, FALSE, FALSE, NULL);
+  if (!event_handle)
+    return -1;
+  HRESULT hr =
+      fence->lpVtbl->SetEventOnCompletion(fence, value, event_handle);
+  if (FAILED(hr)) {
+    CloseHandle(event_handle);
+    return -1;
+  }
+  WaitForSingleObject(event_handle, INFINITE);
+  CloseHandle(event_handle);
+  return 0;
+}
 
 static int create_device(ID3D11Device **out_device) {
   UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
@@ -101,63 +131,138 @@ done:
                                                                         : -1;
 }
 
-static int read_first_pixel(texlink_d3d11_texture_frame_t *texture_frame,
-                            unsigned char out_bgra[4]) {
-  ID3D11Device *device = texlink_d3d11_texture_frame_device(texture_frame);
-  ID3D11Texture2D *texture =
-      texlink_d3d11_texture_frame_texture(texture_frame);
-  ID3D11DeviceContext *context = NULL;
-  D3D11_TEXTURE2D_DESC desc;
-  ID3D11Texture2D *staging = NULL;
-  D3D11_MAPPED_SUBRESOURCE mapped;
-  int ret = -1;
-
-  texture->lpVtbl->GetDesc(texture, &desc);
-  desc.BindFlags = 0;
-  desc.MiscFlags = 0;
-  desc.Usage = D3D11_USAGE_STAGING;
-  desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-
-  device->lpVtbl->GetImmediateContext(device, &context);
-  if (!context)
-    return -1;
-  if (FAILED(device->lpVtbl->CreateTexture2D(device, &desc, NULL, &staging)))
-    goto done;
-
-  context->lpVtbl->CopyResource(context, (ID3D11Resource *)staging,
-                                (ID3D11Resource *)texture);
-  if (SUCCEEDED(context->lpVtbl->Map(context, (ID3D11Resource *)staging, 0,
-                                    D3D11_MAP_READ, 0, &mapped))) {
-    const unsigned char *p = mapped.pData;
-    out_bgra[0] = p[0];
-    out_bgra[1] = p[1];
-    out_bgra[2] = p[2];
-    out_bgra[3] = p[3];
-    context->lpVtbl->Unmap(context, (ID3D11Resource *)staging, 0);
-    ret = 0;
+static void release_render_resources(render_resources_t *rr) {
+  for (int i = 0; i < MAX_FRAMES; i++) {
+    if (rr->srvs[i])
+      rr->srvs[i]->lpVtbl->Release(rr->srvs[i]);
   }
-
-done:
-  if (staging)
-    staging->lpVtbl->Release(staging);
-  context->lpVtbl->Release(context);
-  return ret;
+  if (rr->constants)
+    rr->constants->lpVtbl->Release(rr->constants);
+  if (rr->sampler)
+    rr->sampler->lpVtbl->Release(rr->sampler);
+  if (rr->ps)
+    rr->ps->lpVtbl->Release(rr->ps);
+  if (rr->vs)
+    rr->vs->lpVtbl->Release(rr->vs);
 }
 
-static void present_color(ID3D11Device *device, window_target_t *target,
-                          const unsigned char bgra[4]) {
+static int create_render_resources(ID3D11Device *device,
+                                   render_resources_t *rr) {
+  static const char *shader_src =
+      "Texture2D tex0 : register(t0);\n"
+      "SamplerState samp0 : register(s0);\n"
+      "cbuffer Params : register(b0) { float flip_y; float3 pad; }\n"
+      "struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };\n"
+      "VSOut vs_main(uint vid : SV_VertexID) {\n"
+      "  float2 pos[3] = { float2(-1.0, -1.0), float2(-1.0, 3.0), float2(3.0, -1.0) };\n"
+      "  VSOut o; o.pos = float4(pos[vid], 0.0, 1.0);\n"
+      "  o.uv = float2((pos[vid].x + 1.0) * 0.5, 1.0 - (pos[vid].y + 1.0) * 0.5);\n"
+      "  if (flip_y > 0.5) o.uv.y = 1.0 - o.uv.y;\n"
+      "  return o;\n"
+      "}\n"
+      "float4 ps_main(VSOut i) : SV_Target { return tex0.Sample(samp0, i.uv); }\n";
+  ID3DBlob *vs = NULL;
+  ID3DBlob *ps = NULL;
+  ID3DBlob *err = NULL;
+  D3D11_SAMPLER_DESC sd;
+  D3D11_BUFFER_DESC bd;
+  HRESULT hr;
+
+  memset(rr, 0, sizeof(*rr));
+  hr = D3DCompile(shader_src, strlen(shader_src), NULL, NULL, NULL, "vs_main",
+                  "vs_5_0", 0, 0, &vs, &err);
+  if (FAILED(hr))
+    goto done;
+  hr = D3DCompile(shader_src, strlen(shader_src), NULL, NULL, NULL, "ps_main",
+                  "ps_5_0", 0, 0, &ps, &err);
+  if (FAILED(hr))
+    goto done;
+  hr = device->lpVtbl->CreateVertexShader(device, vs->lpVtbl->GetBufferPointer(vs),
+                                          vs->lpVtbl->GetBufferSize(vs), NULL,
+                                          &rr->vs);
+  if (FAILED(hr))
+    goto done;
+  hr = device->lpVtbl->CreatePixelShader(device, ps->lpVtbl->GetBufferPointer(ps),
+                                         ps->lpVtbl->GetBufferSize(ps), NULL,
+                                         &rr->ps);
+  if (FAILED(hr))
+    goto done;
+
+  memset(&sd, 0, sizeof(sd));
+  sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+  sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+  sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+  sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+  sd.MaxLOD = D3D11_FLOAT32_MAX;
+  hr = device->lpVtbl->CreateSamplerState(device, &sd, &rr->sampler);
+  if (FAILED(hr))
+    goto done;
+
+  memset(&bd, 0, sizeof(bd));
+  bd.ByteWidth = 16;
+  bd.Usage = D3D11_USAGE_DEFAULT;
+  bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+  hr = device->lpVtbl->CreateBuffer(device, &bd, NULL, &rr->constants);
+
+done:
+  if (err)
+    err->lpVtbl->Release(err);
+  if (vs)
+    vs->lpVtbl->Release(vs);
+  if (ps)
+    ps->lpVtbl->Release(ps);
+  return SUCCEEDED(hr) ? 0 : -1;
+}
+
+static int create_texture_srv(ID3D11Device *device, ID3D11Texture2D *texture,
+                              ID3D11ShaderResourceView **out_srv) {
+  D3D11_TEXTURE2D_DESC td;
+  D3D11_SHADER_RESOURCE_VIEW_DESC sd;
+  texture->lpVtbl->GetDesc(texture, &td);
+  memset(&sd, 0, sizeof(sd));
+  sd.Format = td.Format;
+  sd.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+  sd.Texture2D.MipLevels = 1;
+  return SUCCEEDED(device->lpVtbl->CreateShaderResourceView(
+             device, (ID3D11Resource *)texture, &sd, out_srv))
+             ? 0
+             : -1;
+}
+
+static void present_texture(ID3D11Device *device, window_target_t *target,
+                            render_resources_t *rr, int srv_idx, int flip_y) {
   ID3D11DeviceContext *context = NULL;
-  float color[4] = {
-      bgra[2] / 255.0f,
-      bgra[1] / 255.0f,
-      bgra[0] / 255.0f,
-      bgra[3] / 255.0f,
-  };
+  D3D11_VIEWPORT viewport;
+  float clear[4] = {0.02f, 0.02f, 0.025f, 1.0f};
+  float constants[4] = {(float)flip_y, 0.0f, 0.0f, 0.0f};
 
   device->lpVtbl->GetImmediateContext(device, &context);
   if (!context)
     return;
-  context->lpVtbl->ClearRenderTargetView(context, target->rtv, color);
+
+  viewport.TopLeftX = 0.0f;
+  viewport.TopLeftY = 0.0f;
+  viewport.Width = (float)WIDTH;
+  viewport.Height = (float)HEIGHT;
+  viewport.MinDepth = 0.0f;
+  viewport.MaxDepth = 1.0f;
+
+  context->lpVtbl->ClearRenderTargetView(context, target->rtv, clear);
+  context->lpVtbl->UpdateSubresource(context, (ID3D11Resource *)rr->constants,
+                                     0, NULL, constants, 0, 0);
+  context->lpVtbl->IASetInputLayout(context, NULL);
+  context->lpVtbl->IASetPrimitiveTopology(
+      context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+  context->lpVtbl->RSSetViewports(context, 1, &viewport);
+  context->lpVtbl->OMSetRenderTargets(context, 1, &target->rtv, NULL);
+  context->lpVtbl->VSSetShader(context, rr->vs, NULL, 0);
+  context->lpVtbl->VSSetConstantBuffers(context, 0, 1, &rr->constants);
+  context->lpVtbl->PSSetShader(context, rr->ps, NULL, 0);
+  context->lpVtbl->PSSetShaderResources(context, 0, 1, &rr->srvs[srv_idx]);
+  context->lpVtbl->PSSetSamplers(context, 0, 1, &rr->sampler);
+  context->lpVtbl->Draw(context, 3, 0);
+  ID3D11ShaderResourceView *null_srv = NULL;
+  context->lpVtbl->PSSetShaderResources(context, 0, 1, &null_srv);
   context->lpVtbl->Flush(context);
   context->lpVtbl->Release(context);
   target->swapchain->lpVtbl->Present(target->swapchain, 1, 0);
@@ -196,6 +301,7 @@ int main(int argc, char **argv) {
   uint32_t frame_count = texlink_client_frame_count(client);
   if (frame_count > MAX_FRAMES)
     frame_count = MAX_FRAMES;
+  texlink_meta_t meta = texlink_client_meta(client);
 
   ID3D11Device *device = NULL;
   if (create_device(&device) != 0) {
@@ -205,27 +311,73 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  ID3D12Device *sync_device = NULL;
+  D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device,
+                    (void **)&sync_device);
+
+  render_resources_t render;
+  if (create_render_resources(device, &render) != 0) {
+    fprintf(stderr, "D3D11 render resource creation failed\n");
+    if (sync_device)
+      sync_device->lpVtbl->Release(sync_device);
+    device->lpVtbl->Release(device);
+    texlink_client_destroy(client);
+    glfwTerminate();
+    return 1;
+  }
+
   texlink_d3d11_texture_frame_t *texture_frames[MAX_FRAMES] = {0};
+  ID3D12Fence *sync_fences[MAX_FRAMES] = {0};
   for (uint32_t i = 0; i < frame_count; i++) {
+    texlink_frame_t *source_frame = texlink_client_frame(client, i);
     texture_frames[i] =
         texlink_d3d11_texture_frame_import(&(texlink_d3d11_import_desc_t){
             .version = 1,
             .device = device,
-            .frame = texlink_client_frame(client, i),
+            .frame = source_frame,
         });
     if (!texture_frames[i]) {
       fprintf(stderr, "texlink_d3d11_texture_frame_import failed: %s\n",
               texlink_d3d11_last_error_string());
+      release_render_resources(&render);
+      if (sync_device)
+        sync_device->lpVtbl->Release(sync_device);
       device->lpVtbl->Release(device);
       texlink_client_destroy(client);
       glfwTerminate();
       return 1;
+    }
+    if (create_texture_srv(device,
+                           texlink_d3d11_texture_frame_texture(texture_frames[i]),
+                           &render.srvs[i]) != 0) {
+      fprintf(stderr, "D3D11 SRV creation failed\n");
+      release_render_resources(&render);
+      if (sync_device)
+        sync_device->lpVtbl->Release(sync_device);
+      device->lpVtbl->Release(device);
+      texlink_client_destroy(client);
+      glfwTerminate();
+      return 1;
+    }
+    if (sync_device) {
+      texlink_native_handle_t sync_handle;
+      uint64_t sync_value;
+      if (texlink_frame_get_sync_native_handle(
+              source_frame, TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+              &sync_handle, &sync_value) == 0) {
+        sync_device->lpVtbl->OpenSharedHandle(
+            sync_device, (HANDLE)sync_handle.value.ptr, &IID_ID3D12Fence,
+            (void **)&sync_fences[i]);
+      }
     }
   }
 
   window_target_t target;
   if (create_window_target(device, glfwGetWin32Window(window), &target) != 0) {
     fprintf(stderr, "D3D11 swapchain creation failed\n");
+    release_render_resources(&render);
+    if (sync_device)
+      sync_device->lpVtbl->Release(sync_device);
     device->lpVtbl->Release(device);
     texlink_client_destroy(client);
     glfwTerminate();
@@ -244,9 +396,15 @@ int main(int argc, char **argv) {
     if (idx < 0 || (uint32_t)idx >= frame_count)
       idx = 0;
 
-    unsigned char bgra[4] = {0};
-    read_first_pixel(texture_frames[idx], bgra);
-    present_color(device, &target, bgra);
+    if (wait_shared_fence(sync_fences[idx], texlink_frame_sync_value(frame)) !=
+        0) {
+      fprintf(stderr, "D3D12 fence wait failed\n");
+      texlink_client_release_frame(client, frame);
+      break;
+    }
+    int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+                                             TEXLINK_BACKEND_D3D11);
+    present_texture(device, &target, &render, idx, flip_y);
     texlink_client_release_frame(client, frame);
     glfwPollEvents();
   }
@@ -254,6 +412,13 @@ int main(int argc, char **argv) {
   release_window_target(&target);
   for (uint32_t i = 0; i < frame_count; i++)
     texlink_d3d11_texture_frame_destroy(texture_frames[i]);
+  for (uint32_t i = 0; i < frame_count; i++) {
+    if (sync_fences[i])
+      sync_fences[i]->lpVtbl->Release(sync_fences[i]);
+  }
+  release_render_resources(&render);
+  if (sync_device)
+    sync_device->lpVtbl->Release(sync_device);
   device->lpVtbl->Release(device);
   texlink_client_destroy(client);
   glfwDestroyWindow(window);

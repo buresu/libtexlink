@@ -4,7 +4,9 @@
 #include <windows.h>
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <dxgi.h>
+#include <dxgi1_2.h>
 #include <GL/gl.h>
 #include <texlink_wgl.h>
 
@@ -148,7 +150,9 @@ static int create_device(texlink_wgl_texture_frame_t *tf) {
 
 static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
                                  uint32_t width, uint32_t height,
-                                 uint32_t format, HANDLE *out_shared) {
+                                 uint32_t format, HANDLE *out_shared,
+                                 texlink_native_handle_type_t *out_type,
+                                 uint32_t *out_flags) {
   D3D11_TEXTURE2D_DESC td;
   memset(&td, 0, sizeof(td));
   td.Width = width;
@@ -159,12 +163,35 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
   td.SampleDesc.Count = 1;
   td.Usage = D3D11_USAGE_DEFAULT;
   td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-  td.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
+  td.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 
   HRESULT hr =
       tf->device->lpVtbl->CreateTexture2D(tf->device, &td, NULL, &tf->texture2d);
+  if (FAILED(hr)) {
+    td.MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
+    hr = tf->device->lpVtbl->CreateTexture2D(tf->device, &td, NULL,
+                                             &tf->texture2d);
+  }
   if (FAILED(hr))
     return fail("ID3D11Device::CreateTexture2D failed", -EIO);
+
+  tf->texture2d->lpVtbl->GetDesc(tf->texture2d, &td);
+  if (td.MiscFlags & D3D11_RESOURCE_MISC_SHARED_NTHANDLE) {
+    IDXGIResource1 *resource = NULL;
+    hr = tf->texture2d->lpVtbl->QueryInterface(
+        tf->texture2d, &IID_IDXGIResource1, (void **)&resource);
+    if (FAILED(hr) || !resource)
+      return fail("ID3D11Texture2D::QueryInterface(IDXGIResource1) failed",
+                  -EIO);
+    hr = resource->lpVtbl->CreateSharedHandle(resource, NULL, GENERIC_ALL, NULL,
+                                              out_shared);
+    resource->lpVtbl->Release(resource);
+    if (FAILED(hr) || !*out_shared)
+      return fail("IDXGIResource1::CreateSharedHandle failed", -EIO);
+    *out_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE;
+    *out_flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    return 0;
+  }
 
   IDXGIResource *resource = NULL;
   hr = tf->texture2d->lpVtbl->QueryInterface(
@@ -174,15 +201,31 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
 
   hr = resource->lpVtbl->GetSharedHandle(resource, out_shared);
   resource->lpVtbl->Release(resource);
-  return SUCCEEDED(hr) && *out_shared
-             ? 0
-             : fail("IDXGIResource::GetSharedHandle failed", -EIO);
+  if (FAILED(hr) || !*out_shared)
+    return fail("IDXGIResource::GetSharedHandle failed", -EIO);
+  *out_type = TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE;
+  *out_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  return 0;
 }
 
 static int open_shared_texture(texlink_wgl_texture_frame_t *tf,
-                               HANDLE shared_handle) {
-  HRESULT hr = tf->device->lpVtbl->OpenSharedResource(
-      tf->device, shared_handle, &IID_ID3D11Texture2D, (void **)&tf->texture2d);
+                               HANDLE shared_handle,
+                               texlink_native_handle_type_t handle_type) {
+  HRESULT hr;
+  if (handle_type == TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE) {
+    ID3D11Device1 *device1 = NULL;
+    hr = tf->device->lpVtbl->QueryInterface(tf->device, &IID_ID3D11Device1,
+                                            (void **)&device1);
+    if (FAILED(hr) || !device1)
+      return fail("ID3D11Device::QueryInterface(ID3D11Device1) failed", -EIO);
+    hr = device1->lpVtbl->OpenSharedResource1(
+        device1, shared_handle, &IID_ID3D11Texture2D, (void **)&tf->texture2d);
+    device1->lpVtbl->Release(device1);
+  } else {
+    hr = tf->device->lpVtbl->OpenSharedResource(
+        tf->device, shared_handle, &IID_ID3D11Texture2D,
+        (void **)&tf->texture2d);
+  }
   return SUCCEEDED(hr) && tf->texture2d
              ? 0
              : fail("ID3D11Device::OpenSharedResource failed", -EIO);
@@ -225,16 +268,18 @@ texlink_wgl_texture_frame_create(const texlink_wgl_texture_frame_desc_t *desc) {
   uint32_t format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888;
 
   HANDLE shared = NULL;
+  texlink_native_handle_type_t handle_type = TEXLINK_NATIVE_HANDLE_UNKNOWN;
+  uint32_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (create_device(tf) != 0 ||
-      create_shared_texture(tf, desc->width, desc->height, format, &shared) !=
-          0 ||
+      create_shared_texture(tf, desc->width, desc->height, format, &shared,
+                            &handle_type, &handle_flags) != 0 ||
       register_gl_texture(tf) != 0)
     goto err;
 
   texlink_native_handle_t handle = {
       .version = 1,
-      .type = TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE,
-      .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+      .type = handle_type,
+      .flags = handle_flags,
       .value.ptr = shared,
   };
   tf->frame = texlink_frame_create_from_native_handle(
@@ -270,8 +315,13 @@ texlink_wgl_texture_frame_import(const texlink_wgl_import_desc_t *desc) {
 
   texlink_native_handle_t handle;
   if (texlink_frame_get_native_handle(
-          desc->frame, TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE, &handle) != 0)
-    return NULL;
+          desc->frame, TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE, &handle) !=
+      0) {
+    if (texlink_frame_get_native_handle(
+            desc->frame, TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE, &handle) !=
+        0)
+      return NULL;
+  }
 
   texlink_wgl_texture_frame_t *tf = calloc(1, sizeof(*tf));
   if (!tf)
@@ -279,7 +329,7 @@ texlink_wgl_texture_frame_import(const texlink_wgl_import_desc_t *desc) {
   tf->frame = desc->frame;
 
   if (create_device(tf) != 0 ||
-      open_shared_texture(tf, (HANDLE)handle.value.ptr) != 0 ||
+      open_shared_texture(tf, (HANDLE)handle.value.ptr, handle.type) != 0 ||
       register_gl_texture(tf) != 0)
     goto err;
 
@@ -328,6 +378,8 @@ int texlink_wgl_texture_frame_unlock(
   if (!interop.unlock_objects(texture_frame->dx_device, 1,
                               &texture_frame->dx_object))
     return -EIO;
+  if (texture_frame->context)
+    texture_frame->context->lpVtbl->Flush(texture_frame->context);
   texture_frame->locked = 0;
   return 0;
 }
