@@ -11,7 +11,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
+int texlink_send_ipc_handles(texlink_socket_t sock,
+                             const texlink_ipc_handle_t *fds, int nfds) {
   char dummy = 0;
   struct iovec iov = {.iov_base = &dummy, .iov_len = 1};
 
@@ -38,7 +39,8 @@ int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
   return (ret < 0) ? -1 : 0;
 }
 
-int texlink_recv_fds(texlink_socket_t sock, int *fds, int nfds) {
+int texlink_recv_ipc_handles(texlink_socket_t sock, texlink_ipc_handle_t *fds,
+                             int nfds) {
   char dummy;
   struct iovec iov = {.iov_base = &dummy, .iov_len = 1};
 
@@ -153,7 +155,7 @@ int texlink_send_frame(texlink_socket_t sock, const texlink_frame_msg_t *msg,
     return -1;
 
   if (msg->has_sync_fd && sync_fd >= 0)
-    return texlink_send_fds(sock, &sync_fd, 1);
+    return texlink_send_ipc_handles(sock, &sync_fd, 1);
 
   return 0;
 }
@@ -171,7 +173,7 @@ int texlink_recv_frame(texlink_socket_t sock, texlink_frame_msg_t *msg,
     return -1;
 
   if (msg->has_sync_fd)
-    texlink_recv_fds(sock, sync_fd, 1);
+    texlink_recv_ipc_handles(sock, sync_fd, 1);
 
   return 0;
 }

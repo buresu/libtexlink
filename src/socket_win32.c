@@ -159,8 +159,9 @@ int texlink_socket_recv(texlink_socket_t sock, void *data, size_t size) {
   return 0;
 }
 
-int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
-  if (!sock || !fds || nfds != 1)
+int texlink_send_ipc_handles(texlink_socket_t sock,
+                             const texlink_ipc_handle_t *handles, int count) {
+  if (!sock || !handles || count != 1)
     return -1;
 
   ULONG client_pid = 0;
@@ -172,7 +173,7 @@ int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
     return -1;
 
   HANDLE duplicated = NULL;
-  HANDLE source = *(HANDLE const *)fds;
+  HANDLE source = handles[0];
   BOOL ok = DuplicateHandle(GetCurrentProcess(), source, client_proc,
                             &duplicated, 0, FALSE, DUPLICATE_SAME_ACCESS);
   CloseHandle(client_proc);
@@ -183,13 +184,14 @@ int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds) {
   return texlink_socket_send(sock, &wire, sizeof(wire));
 }
 
-int texlink_recv_fds(texlink_socket_t sock, int *fds, int nfds) {
-  if (!sock || !fds || nfds != 1)
+int texlink_recv_ipc_handles(texlink_socket_t sock,
+                             texlink_ipc_handle_t *handles, int count) {
+  if (!sock || !handles || count != 1)
     return -1;
   uintptr_t wire = 0;
   if (texlink_socket_recv(sock, &wire, sizeof(wire)) != 0)
     return -1;
-  *(HANDLE *)fds = (HANDLE)wire;
+  handles[0] = (HANDLE)wire;
   return 0;
 }
 

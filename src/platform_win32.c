@@ -87,7 +87,7 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type) {
   HANDLE handle = NULL;
-  if (texlink_recv_fds(sock, (int *)&handle, 1) < 0)
+  if (texlink_recv_ipc_handles(sock, &handle, 1) < 0)
     return -1;
 
   frame->handle.version = 1;
@@ -107,7 +107,8 @@ int texlink_frame_send_native_handle(texlink_socket_t sock,
   if (texlink_frame_get_native_handle(frame, type, &handle) != 0 ||
       !texlink_native_handle_type_is_ipc(handle.type))
     return -1;
-  return texlink_send_fds(sock, (const int *)&handle.value.ptr, 1);
+  texlink_ipc_handle_t ipc_handle = (HANDLE)handle.value.ptr;
+  return texlink_send_ipc_handles(sock, &ipc_handle, 1);
 }
 
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {

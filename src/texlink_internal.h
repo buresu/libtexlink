@@ -11,6 +11,7 @@
 #include <windows.h>
 typedef struct texlink_win32_socket *texlink_socket_t;
 typedef HANDLE texlink_os_handle_t;
+typedef HANDLE texlink_ipc_handle_t;
 typedef DWORD texlink_pid_t;
 #define TEXLINK_INVALID_SOCKET_HANDLE NULL
 #define TEXLINK_INVALID_OS_HANDLE NULL
@@ -23,6 +24,7 @@ typedef DWORD texlink_pid_t;
 #include <sys/types.h>
 typedef int texlink_socket_t;
 typedef int texlink_os_handle_t;
+typedef int texlink_ipc_handle_t;
 typedef pid_t texlink_pid_t;
 #define TEXLINK_INVALID_SOCKET_HANDLE -1
 #define TEXLINK_INVALID_OS_HANDLE -1
@@ -165,9 +167,11 @@ struct texlink_client {
   char path[TEXLINK_SOCKET_PATH_MAX];
 };
 
-/* socket.c */
-int texlink_send_fds(texlink_socket_t sock, const int *fds, int nfds);
-int texlink_recv_fds(texlink_socket_t sock, int *fds, int nfds);
+/* socket_*.c */
+int texlink_send_ipc_handles(texlink_socket_t sock,
+                             const texlink_ipc_handle_t *handles, int count);
+int texlink_recv_ipc_handles(texlink_socket_t sock,
+                             texlink_ipc_handle_t *handles, int count);
 texlink_socket_t texlink_socket_bind(const char *path);
 texlink_socket_t texlink_socket_connect(const char *path);
 int texlink_socket_accept(texlink_socket_t server, texlink_socket_t *out_client);
@@ -180,11 +184,11 @@ int texlink_send_frame(texlink_socket_t sock, const texlink_frame_msg_t *msg,
 int texlink_recv_frame(texlink_socket_t sock, texlink_frame_msg_t *msg,
                        int *sync_fd);
 
-/* sync.c */
+/* sync_*.c */
 int texlink_export_sync_file(int dma_fd);
 int texlink_wait_sync_file(int sync_fd, int timeout_ms);
 
-/* registry.c */
+/* registry_*.c */
 void texlink_registry_announce(const char *name, const char *path);
 int texlink_registry_unregister(const char *name);
 
