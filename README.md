@@ -4,7 +4,7 @@
 
 libtexlink allows one process (producer) to share GPU textures or buffers with another process (consumer) with minimal copies.
 
-The library abstracts platform-specific external memory handles behind a unified C API, enabling efficient inter-process GPU resource sharing across Linux and Windows.
+The library abstracts platform-specific external memory handles behind a unified C API, enabling efficient GPU resource sharing between processes running on the same system and GPU.
 
 **Supported backends**
 
