@@ -27,13 +27,13 @@ else()
 endif()
 
 if(WIN32)
-  list(APPEND TEXLINK_CORE_SOURCES src/buffer_win32.c src/socket_win32.c
+  list(APPEND TEXLINK_CORE_SOURCES src/frame_win32.c src/socket_win32.c
        src/sync_win32.c src/registry_win32.c src/platform_win32.c)
 else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GBM REQUIRED gbm)
   list(APPEND TEXLINK_CORE_SOURCES src/socket_posix.c src/sync_posix.c
-       src/registry_posix.c src/platform_posix.c src/buffer_posix.c)
+       src/registry_posix.c src/platform_posix.c src/frame_posix.c)
   list(APPEND TEXLINK_CORE_PRIVATE_INCLUDES ${GBM_INCLUDE_DIRS})
   list(APPEND TEXLINK_CORE_PUBLIC_LIBS rt ${GBM_LIBRARIES})
   list(APPEND TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS ${GBM_CFLAGS_OTHER})
