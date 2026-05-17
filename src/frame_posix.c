@@ -402,8 +402,7 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->handle_type = type;
-  out_handle->flags =
-      TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
+  out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
   out_handle->value.fd = fd;
   return 0;
 }

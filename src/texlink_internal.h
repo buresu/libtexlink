@@ -152,7 +152,6 @@ struct texlink_server {
   int last_error;
   int write_idx;
   int is_registered;
-  uint32_t flags;
   char shm_name[64];
   char name[TEXLINK_NAME_MAX];
   char path[TEXLINK_SOCKET_PATH_MAX];
@@ -164,7 +163,6 @@ struct texlink_client {
   texlink_state_t state;
   int last_error;
   int timeout_ms;
-  uint32_t flags;
   char name[TEXLINK_NAME_MAX];
   char path[TEXLINK_SOCKET_PATH_MAX];
 };

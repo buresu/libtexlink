@@ -28,7 +28,6 @@ typedef struct {
 typedef struct {
   ID3D11Device *device;
   texlink_frame_t *frame;
-  uint32_t flags;
 } texlink_d3d11_import_desc_t;
 
 typedef struct {
@@ -39,7 +38,7 @@ typedef struct {
   uint32_t format;
   uint32_t stride;
   uint64_t size;
-  uint32_t flags;
+  texlink_native_handle_flags_t flags;
 } texlink_d3d11_wrap_texture_desc_t;
 
 DXGI_FORMAT texlink_d3d11_format(uint32_t texlink_format);

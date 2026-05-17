@@ -254,7 +254,6 @@ texlink_server_t *texlink_server_create(const texlink_server_desc_t *desc) {
   for (uint32_t i = 0; i < server->frame_count; i++)
     server->frames[i]->index = (int)i;
   server->backend_type = desc->backend_type;
-  server->flags = desc->flags;
   server->state = TEXLINK_STATE_CREATED;
 
   if (desc->name)
@@ -514,7 +513,6 @@ texlink_client_t *texlink_client_create(const texlink_client_desc_t *desc) {
 
   client->backend_type = desc->backend_type;
   client->timeout_ms = desc->timeout_ms;
-  client->flags = desc->flags;
   client->state = TEXLINK_STATE_CREATED;
 
   if (desc->name)

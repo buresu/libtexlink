@@ -251,14 +251,13 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
     return ret;
 
   HANDLE dup_handle = (HANDLE)borrowed.value.ptr;
-  uint32_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  texlink_native_handle_flags_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (type != TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
     if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)borrowed.value.ptr,
                          GetCurrentProcess(), &dup_handle, 0, FALSE,
                          DUPLICATE_SAME_ACCESS))
       return -EIO;
-    flags =
-        TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
+    flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
   }
 
   memset(out_handle, 0, sizeof(*out_handle));

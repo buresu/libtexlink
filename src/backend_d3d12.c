@@ -156,7 +156,7 @@ texlink_frame_t *texlink_d3d12_frame_wrap_resource(
   D3D12_RESOURCE_DESC rd;
   desc->resource->lpVtbl->GetDesc(desc->resource, &rd);
   HANDLE shared = desc->shared_handle;
-  uint32_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  texlink_native_handle_flags_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (!shared) {
     if (create_shared_handle(desc->device, (ID3D12DeviceChild *)desc->resource,
                              &shared) != 0)

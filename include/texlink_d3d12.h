@@ -30,7 +30,6 @@ typedef struct {
 typedef struct {
   ID3D12Device *device;
   texlink_frame_t *frame;
-  uint32_t flags;
 } texlink_d3d12_import_desc_t;
 
 typedef struct {
@@ -42,7 +41,6 @@ typedef struct {
   uint32_t format;
   uint32_t stride;
   uint64_t size;
-  uint32_t flags;
 } texlink_d3d12_wrap_resource_desc_t;
 
 typedef struct {
@@ -54,7 +52,6 @@ typedef struct {
 typedef struct {
   ID3D12Device *device;
   texlink_frame_t *frame;
-  uint32_t flags;
 } texlink_d3d12_fence_import_desc_t;
 
 DXGI_FORMAT texlink_d3d12_format(uint32_t texlink_format);

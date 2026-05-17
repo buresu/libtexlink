@@ -109,7 +109,7 @@ static int set_device(texlink_d3d11_texture_frame_t *tf,
 static int shared_handle_from_texture(ID3D11Texture2D *texture,
                                       HANDLE *out_shared,
                                       texlink_native_handle_type_t *out_type,
-                                      uint32_t *out_flags) {
+                                      texlink_native_handle_flags_t *out_flags) {
   D3D11_TEXTURE2D_DESC td;
   texture->lpVtbl->GetDesc(texture, &td);
 
@@ -155,7 +155,7 @@ static int create_shared_texture(texlink_d3d11_texture_frame_t *tf,
                                  uint32_t format, UINT bind_flags,
                                  UINT misc_flags, HANDLE *out_shared,
                                  texlink_native_handle_type_t *out_type,
-                                 uint32_t *out_flags) {
+                                 texlink_native_handle_flags_t *out_flags) {
   DXGI_FORMAT dxgi_format = texlink_d3d11_format(format);
   if (dxgi_format == DXGI_FORMAT_UNKNOWN)
     return fail("unsupported D3D11 texture format", -EINVAL);
@@ -221,7 +221,7 @@ texlink_frame_t *texlink_d3d11_frame_wrap_texture(
 
   HANDLE shared = desc->shared_handle;
   texlink_native_handle_type_t handle_type = TEXLINK_NATIVE_HANDLE_UNKNOWN;
-  uint32_t handle_flags =
+  texlink_native_handle_flags_t handle_flags =
       desc->flags ? desc->flags : TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (!shared &&
       shared_handle_from_texture(desc->texture, &shared, &handle_type,
@@ -274,7 +274,7 @@ texlink_d3d11_texture_frame_t *texlink_d3d11_texture_frame_create(
   uint32_t format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888;
   HANDLE shared = NULL;
   texlink_native_handle_type_t handle_type = TEXLINK_NATIVE_HANDLE_UNKNOWN;
-  uint32_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  texlink_native_handle_flags_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (set_device(tf, desc->device) != 0 ||
       create_shared_texture(tf, desc->width, desc->height, format,
                             desc->bind_flags, desc->misc_flags, &shared,

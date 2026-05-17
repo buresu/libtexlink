@@ -152,7 +152,7 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
                                  uint32_t width, uint32_t height,
                                  uint32_t format, HANDLE *out_shared,
                                  texlink_native_handle_type_t *out_type,
-                                 uint32_t *out_flags) {
+                                 texlink_native_handle_flags_t *out_flags) {
   D3D11_TEXTURE2D_DESC td;
   memset(&td, 0, sizeof(td));
   td.Width = width;
@@ -269,7 +269,7 @@ texlink_wgl_texture_frame_create(const texlink_wgl_texture_frame_desc_t *desc) {
 
   HANDLE shared = NULL;
   texlink_native_handle_type_t handle_type = TEXLINK_NATIVE_HANDLE_UNKNOWN;
-  uint32_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  texlink_native_handle_flags_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   if (create_device(tf) != 0 ||
       create_shared_texture(tf, desc->width, desc->height, format, &shared,
                             &handle_type, &handle_flags) != 0 ||

@@ -78,7 +78,6 @@ typedef struct {
   uint32_t format;
   uint32_t stride;
   uint64_t size;
-  uint32_t flags;
 } texlink_frame_desc_t;
 
 typedef enum {
@@ -92,15 +91,12 @@ typedef enum {
   TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE,
   TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
   TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
-
-  TEXLINK_NATIVE_HANDLE_IOSURFACE,
 } texlink_native_handle_type_t;
 
 typedef enum {
   TEXLINK_NATIVE_HANDLE_FLAG_NONE = 0,
   TEXLINK_NATIVE_HANDLE_FLAG_BORROWED = 1u << 0,
   TEXLINK_NATIVE_HANDLE_FLAG_OWNED = 1u << 1,
-  TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED = 1u << 2,
 } texlink_native_handle_flags_t;
 
 typedef struct {
@@ -155,7 +151,6 @@ typedef struct {
   const char *path;
   texlink_frame_t **frames;
   uint32_t frame_count;
-  uint32_t flags;
 } texlink_server_desc_t;
 
 typedef struct {
@@ -163,7 +158,6 @@ typedef struct {
   const char *name;
   const char *path;
   int timeout_ms;
-  uint32_t flags;
 } texlink_client_desc_t;
 
 /* Server API */

@@ -18,12 +18,10 @@ typedef struct {
   uint32_t width;
   uint32_t height;
   uint32_t format;
-  uint32_t flags;
 } texlink_wgl_texture_frame_desc_t;
 
 typedef struct {
   texlink_frame_t *frame;
-  uint32_t flags;
 } texlink_wgl_import_desc_t;
 
 texlink_wgl_texture_frame_t *
