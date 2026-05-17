@@ -48,9 +48,9 @@ static int normalize_range(uint64_t frame_size, uint64_t offset,
 }
 
 static uint64_t dma_buf_sync_flags(uint32_t access) {
-  if ((access & TEXLINK_CPU_ACCESS_READ) && (access & TEXLINK_CPU_ACCESS_WRITE))
+  if ((access & TEXLINK_MAP_READ) && (access & TEXLINK_MAP_WRITE))
     return DMA_BUF_SYNC_RW;
-  if (access & TEXLINK_CPU_ACCESS_WRITE)
+  if (access & TEXLINK_MAP_WRITE)
     return DMA_BUF_SYNC_WRITE;
   return DMA_BUF_SYNC_READ;
 }
@@ -145,7 +145,7 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
     return -EINVAL;
   if (!texlink_frame_is_mapped(frame))
     return -EINVAL;
-  if (!(desc->access & (TEXLINK_CPU_ACCESS_READ | TEXLINK_CPU_ACCESS_WRITE)))
+  if (!(desc->flags & (TEXLINK_MAP_READ | TEXLINK_MAP_WRITE)))
     return -EINVAL;
   if (frame->active_access)
     return -EBUSY;
@@ -158,13 +158,13 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
 
   if (frame_needs_dma_buf_sync(frame)) {
     struct dma_buf_sync sync = {
-        .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(desc->access),
+        .flags = DMA_BUF_SYNC_START | dma_buf_sync_flags(desc->flags),
     };
     if (ioctl(frame->dma_fd, DMA_BUF_IOCTL_SYNC, &sync) < 0)
       return -errno;
   }
 
-  frame->active_access = desc->access;
+  frame->active_access = desc->flags;
   frame->active_access_offset = desc->offset;
   frame->active_access_size = access_size;
   return 0;
@@ -178,7 +178,7 @@ int texlink_frame_cpu_end(texlink_frame_t *frame,
     return -EINVAL;
   if (!frame->active_access)
     return -EINVAL;
-  if (desc->access != frame->active_access)
+  if (desc->flags != frame->active_access)
     return -EINVAL;
 
   uint64_t access_size = 0;

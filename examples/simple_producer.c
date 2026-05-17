@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
       break;
 
     texlink_cpu_access_desc_t access_desc = {
-        .access = TEXLINK_CPU_ACCESS_WRITE,
+        .flags = TEXLINK_MAP_WRITE,
         .offset = 0,
         .size = 0,
     };

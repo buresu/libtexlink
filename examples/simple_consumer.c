@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     texlink_meta_t cur_meta = texlink_client_meta(client);
     texlink_cpu_access_desc_t access_desc = {
-        .access = TEXLINK_CPU_ACCESS_READ,
+        .flags = TEXLINK_MAP_READ,
         .offset = 0,
         .size = 0,
     };

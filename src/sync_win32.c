@@ -119,7 +119,7 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
     return -ENOTSUP;
   if (!texlink_frame_is_mapped(frame))
     return -EINVAL;
-  if (!(desc->access & (TEXLINK_CPU_ACCESS_READ | TEXLINK_CPU_ACCESS_WRITE)))
+  if (!(desc->flags & (TEXLINK_MAP_READ | TEXLINK_MAP_WRITE)))
     return -EINVAL;
   if (frame->active_access)
     return -EBUSY;
@@ -130,7 +130,7 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
   if (ret != 0)
     return ret;
 
-  frame->active_access = desc->access;
+  frame->active_access = desc->flags;
   frame->active_access_offset = desc->offset;
   frame->active_access_size = access_size;
   return 0;
@@ -144,7 +144,7 @@ int texlink_frame_cpu_end(texlink_frame_t *frame,
     return -ENOTSUP;
   if (!texlink_frame_is_mapped(frame))
     return -EINVAL;
-  if (!frame->active_access || desc->access != frame->active_access)
+  if (!frame->active_access || desc->flags != frame->active_access)
     return -EINVAL;
 
   uint64_t access_size = 0;

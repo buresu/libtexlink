@@ -62,7 +62,7 @@ typedef struct {
   uint64_t size;
   uint64_t frame_id;
   uint32_t sync_handle_type;
-  uint32_t _pad0;
+  uint32_t _reserved;
   uint64_t sync_value;
 } texlink_meta_t;
 
@@ -105,7 +105,7 @@ typedef enum {
 
 typedef struct {
   texlink_native_handle_type_t handle_type;
-  uint32_t flags;
+  texlink_native_handle_flags_t flags;
   union {
     int fd;
     void *ptr;
@@ -132,7 +132,7 @@ typedef enum {
 } texlink_map_flags_t;
 
 typedef struct {
-  uint32_t flags;
+  texlink_map_flags_t flags;
   uint64_t offset;
   uint64_t size;
 } texlink_map_desc_t;
@@ -143,13 +143,8 @@ typedef struct {
   uint32_t stride;
 } texlink_mapping_t;
 
-typedef enum {
-  TEXLINK_CPU_ACCESS_READ = 1u << 0,
-  TEXLINK_CPU_ACCESS_WRITE = 1u << 1,
-} texlink_cpu_access_t;
-
 typedef struct {
-  uint32_t access;
+  texlink_map_flags_t flags;
   uint64_t offset;
   uint64_t size;
 } texlink_cpu_access_desc_t;
@@ -235,7 +230,7 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
 int texlink_frame_cpu_end(texlink_frame_t *frame,
                           const texlink_cpu_access_desc_t *desc);
 
-/* Name-based discovery (Spout-style registry) */
+/* Name-based discovery */
 #define TEXLINK_NAME_MAX 64
 
 int texlink_registry_list(char (*names)[TEXLINK_NAME_MAX], int max);
