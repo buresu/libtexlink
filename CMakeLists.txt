@@ -208,11 +208,17 @@ if(WIN32 AND TEXLINK_WITH_D3D12)
 endif()
 
 if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
-  add_library(texlink_vulkan src/backend_vulkan.c)
+  if(WIN32)
+    set(TEXLINK_VULKAN_PLATFORM_SRC src/backend_vulkan_win32.c)
+  else()
+    set(TEXLINK_VULKAN_PLATFORM_SRC src/backend_vulkan_posix.c)
+  endif()
+  add_library(texlink_vulkan src/backend_vulkan.c ${TEXLINK_VULKAN_PLATFORM_SRC})
   target_link_libraries(texlink_vulkan PUBLIC texlink Vulkan::Vulkan)
   target_include_directories(
     texlink_vulkan PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-                          $<INSTALL_INTERFACE:include> ${Vulkan_INCLUDE_DIRS})
+                          $<INSTALL_INTERFACE:include> ${Vulkan_INCLUDE_DIRS}
+                  PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
   if(MSVC)
     target_compile_definitions(texlink_vulkan PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(texlink_vulkan PRIVATE /W4)
