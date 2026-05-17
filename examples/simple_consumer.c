@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
       .offset = 0,
       .size = 0,
   };
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     if (texlink_frame_map(frame, &map_desc, &mappings[i]) != 0) {
       fprintf(stderr, "texlink_frame_map failed\n");
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     texlink_client_release_frame(client, frame);
   }
 
-  for (uint32_t i = 0; i < frame_count; i++)
+  for (int i = 0; i < frame_count; i++)
     texlink_frame_unmap(texlink_client_frame(client, i));
   texlink_client_destroy(client);
   return 0;

@@ -437,7 +437,7 @@ int main(void) {
   int frame_count = texlink_client_frame_count(client);
   if (frame_count > MAX_IMAGES)
     frame_count = MAX_IMAGES;
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     if (!frame)
       break;
@@ -474,7 +474,7 @@ int main(void) {
       break;
     }
     int idx = texlink_frame_index(frame);
-    if (idx < 0 || (uint32_t)idx >= frame_count) {
+    if (idx < 0 || idx >= frame_count) {
       texlink_client_release_frame(client, frame);
       continue;
     }

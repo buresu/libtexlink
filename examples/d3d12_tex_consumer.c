@@ -667,7 +667,7 @@ int main(int argc, char **argv) {
 
   texlink_d3d12_texture_frame_t *texture_frames[MAX_FRAMES] = {0};
   ID3D12Fence *sync_fences[MAX_FRAMES] = {0};
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     texlink_frame_t *source_frame = texlink_client_frame(client, i);
     texture_frames[i] =
         texlink_d3d12_texture_frame_import(&(texlink_d3d12_import_desc_t){
@@ -718,7 +718,7 @@ int main(int argc, char **argv) {
     }
 
     int idx = texlink_frame_index(frame);
-    if (idx < 0 || (uint32_t)idx >= frame_count)
+    if (idx < 0 || idx >= frame_count)
       idx = 0;
 
     wait_shared_fence(sync_fences[idx], texlink_frame_sync_value(frame));
@@ -736,9 +736,9 @@ int main(int argc, char **argv) {
     glfwPollEvents();
   }
 
-  for (uint32_t i = 0; i < frame_count; i++)
+  for (int i = 0; i < frame_count; i++)
     texlink_d3d12_texture_frame_destroy(texture_frames[i]);
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     if (sync_fences[i])
       sync_fences[i]->lpVtbl->Release(sync_fences[i]);
   }

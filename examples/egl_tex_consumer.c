@@ -68,7 +68,7 @@ int main(void) {
   int frame_count = texlink_client_frame_count(client);
   if (frame_count > 2)
     frame_count = 2;
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     if (!frame)
       break;
@@ -157,7 +157,7 @@ int main(void) {
   }
 
   texlink_client_destroy(client);
-  for (uint32_t i = 0; i < frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     glDeleteTextures(1, &textures[i]);
     texlink_egl_image_destroy(images[i]);
   }
