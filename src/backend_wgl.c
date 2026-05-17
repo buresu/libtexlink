@@ -277,14 +277,12 @@ texlink_wgl_texture_frame_create(const texlink_wgl_texture_frame_desc_t *desc) {
     goto err;
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = handle_type,
       .flags = handle_flags,
       .value.ptr = shared,
   };
   tf->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = desc->width,
           .height = desc->height,

@@ -41,12 +41,10 @@ int main(int argc, char **argv) {
   /* Double-buffering: two raw frames */
   texlink_frame_t *frames[2] = {
       texlink_frame_create(&(texlink_frame_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
       texlink_frame_create(&(texlink_frame_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
@@ -59,7 +57,6 @@ int main(int argc, char **argv) {
 
   texlink_mapping_t mappings[2] = {0};
   texlink_map_desc_t map_desc = {
-      .version = 1,
       .flags = TEXLINK_MAP_WRITE,
       .offset = 0,
       .size = 0,
@@ -79,7 +76,6 @@ int main(int argc, char **argv) {
    */
   printf("Serving \"%s\"...\n", name);
   texlink_server_desc_t desc = {
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_CPU,
       .frames = frames,
@@ -101,7 +97,6 @@ int main(int argc, char **argv) {
       break;
 
     texlink_cpu_access_desc_t access_desc = {
-        .version = 1,
         .access = TEXLINK_CPU_ACCESS_WRITE,
         .offset = 0,
         .size = 0,

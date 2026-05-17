@@ -144,14 +144,12 @@ static int create_d3d11_shared_frame(SharedImage *img) {
     return -1;
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
       .value.ptr = img->shared_handle,
   };
   img->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
@@ -561,7 +559,6 @@ int main(void) {
       return 1;
     }
     images[i].image = texlink_vk_image_import(&(texlink_vk_import_desc_t){
-        .version = 1,
         .device = vk.device,
         .memory_properties = vk.mem_props,
         .frame = images[i].frame,
@@ -571,7 +568,6 @@ int main(void) {
 #else
     images[i].image =
         texlink_vk_image_frame_create(&(texlink_vk_image_frame_desc_t){
-            .version = 1,
             .device = vk.device,
             .memory_properties = vk.mem_props,
             .width = WIDTH,
@@ -592,7 +588,6 @@ int main(void) {
   const char *name = "d3d_interop";
   printf("Serving '%s'...\n", name);
   texlink_server_desc_t desc = {
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_VULKAN,
       .frames = frames,

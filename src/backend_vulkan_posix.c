@@ -165,7 +165,6 @@ texlink_vk_image_frame_create(const texlink_vk_image_frame_desc_t *desc) {
 
   uint32_t format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888;
   texlink_frame_t *frame = texlink_frame_create(&(texlink_frame_desc_t){
-      .version = 1,
       .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
@@ -222,13 +221,11 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
   }
 
   handle = (texlink_native_handle_t){
-      .version = 1,
       .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
       .flags = flags ? flags : TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
       .value.fd = fd,
   };
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .version = 1,
       .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,

@@ -226,7 +226,6 @@ texlink_vk_image_frame_create(const texlink_vk_image_frame_desc_t *desc) {
     goto err;
 
   image->frame = texlink_vk_frame_wrap_image(&(texlink_vk_wrap_image_desc_t){
-      .version = 1,
       .device = desc->device,
       .image = image->image,
       .memory = image->memory,
@@ -276,7 +275,6 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
         !win32_handle)
       return NULL;
 
-    handle.version = 1;
     handle.type = TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
     handle.value.ptr = win32_handle;
@@ -291,7 +289,6 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
 
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .version = 1,
       .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,

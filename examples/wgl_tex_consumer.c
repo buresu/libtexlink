@@ -86,7 +86,6 @@ int main(int argc, char **argv) {
   glfwSwapInterval(1);
 
   texlink_client_t *client = texlink_client_create(&(texlink_client_desc_t){
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_WGL,
       .timeout_ms = 5000,
@@ -113,7 +112,6 @@ int main(int argc, char **argv) {
     texlink_frame_t *frame = texlink_client_frame(client, i);
     texture_frames[i] =
         texlink_wgl_texture_frame_import(&(texlink_wgl_import_desc_t){
-            .version = 1,
             .frame = frame,
         });
     if (!texture_frames[i]) {

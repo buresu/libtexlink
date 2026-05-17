@@ -49,7 +49,6 @@ int main(void) {
 
   printf("Connecting to 'texshare'...\n");
   texlink_client_desc_t desc = {
-      .version = 1,
       .name = "texshare",
       .backend = TEXLINK_BACKEND_EGL,
       .timeout_ms = 5000,
@@ -75,7 +74,6 @@ int main(void) {
       break;
 
     images[i] = texlink_egl_image_import(&(texlink_egl_import_desc_t){
-        .version = 1,
         .display = dpy,
         .frame = frame,
     });

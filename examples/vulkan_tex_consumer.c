@@ -412,7 +412,6 @@ int main(void) {
   const char *name = "d3d_interop";
   printf("Connecting to '%s'...\n", name);
   texlink_client_desc_t desc = {
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_VULKAN,
       .timeout_ms = 5000,
@@ -443,7 +442,6 @@ int main(void) {
     if (!frame)
       break;
     images[i].image = texlink_vk_image_import(&(texlink_vk_import_desc_t){
-        .version = 1,
         .device = vk.device,
         .memory_properties = vk.mem_props,
         .frame = frame,

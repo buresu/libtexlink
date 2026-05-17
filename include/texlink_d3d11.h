@@ -17,7 +17,6 @@ extern "C" {
 typedef struct texlink_d3d11_texture_frame texlink_d3d11_texture_frame_t;
 
 typedef struct {
-  uint32_t version;
   ID3D11Device *device;
   uint32_t width;
   uint32_t height;
@@ -27,14 +26,12 @@ typedef struct {
 } texlink_d3d11_texture_frame_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D11Device *device;
   texlink_frame_t *frame;
   uint32_t flags;
 } texlink_d3d11_import_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D11Texture2D *texture;
   HANDLE shared_handle;
   uint32_t width;

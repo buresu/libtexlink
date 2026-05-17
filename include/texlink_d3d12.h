@@ -18,7 +18,6 @@ typedef struct texlink_d3d12_texture_frame texlink_d3d12_texture_frame_t;
 typedef struct texlink_d3d12_fence_frame texlink_d3d12_fence_frame_t;
 
 typedef struct {
-  uint32_t version;
   ID3D12Device *device;
   uint32_t width;
   uint32_t height;
@@ -29,14 +28,12 @@ typedef struct {
 } texlink_d3d12_texture_frame_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D12Device *device;
   texlink_frame_t *frame;
   uint32_t flags;
 } texlink_d3d12_import_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D12Device *device;
   ID3D12Resource *resource;
   HANDLE shared_handle;
@@ -49,14 +46,12 @@ typedef struct {
 } texlink_d3d12_wrap_resource_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D12Device *device;
   uint64_t initial_value;
   D3D12_FENCE_FLAGS flags;
 } texlink_d3d12_fence_frame_desc_t;
 
 typedef struct {
-  uint32_t version;
   ID3D12Device *device;
   texlink_frame_t *frame;
   uint32_t flags;

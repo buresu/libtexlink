@@ -12,13 +12,11 @@ typedef struct texlink_egl_image texlink_egl_image_t;
 typedef struct texlink_egl_texture_frame texlink_egl_texture_frame_t;
 
 typedef struct {
-  uint32_t version;
   EGLDisplay display;
   texlink_frame_t *frame;
 } texlink_egl_import_desc_t;
 
 typedef struct {
-  uint32_t version;
   EGLDisplay display;
   uint32_t width;
   uint32_t height;
@@ -26,7 +24,6 @@ typedef struct {
 } texlink_egl_texture_frame_desc_t;
 
 typedef struct {
-  uint32_t version;
   EGLDisplay display;
   EGLContext context;
   unsigned int texture;

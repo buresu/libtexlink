@@ -425,7 +425,6 @@ int main(int argc, char **argv) {
 
     frames[i] = texlink_d3d12_frame_wrap_resource(
         &(texlink_d3d12_wrap_resource_desc_t){
-            .version = 1,
             .device = ctx.device,
             .resource = resources[i],
             .shared_handle = shared_textures[i].shared_handle,
@@ -441,7 +440,6 @@ int main(int argc, char **argv) {
       return 1;
     }
     texlink_native_handle_t sync_handle = {
-        .version = 1,
         .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
         .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
         .value.ptr = ctx.shared_fence,
@@ -455,7 +453,6 @@ int main(int argc, char **argv) {
   }
 
   texlink_server_t *server = texlink_server_create(&(texlink_server_desc_t){
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_D3D12,
       .frames = frames,

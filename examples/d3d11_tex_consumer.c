@@ -286,7 +286,6 @@ int main(int argc, char **argv) {
   }
 
   texlink_client_t *client = texlink_client_create(&(texlink_client_desc_t){
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_D3D11,
       .timeout_ms = 5000,
@@ -332,7 +331,6 @@ int main(int argc, char **argv) {
     texlink_frame_t *source_frame = texlink_client_frame(client, i);
     texture_frames[i] =
         texlink_d3d11_texture_frame_import(&(texlink_d3d11_import_desc_t){
-            .version = 1,
             .device = device,
             .frame = source_frame,
         });

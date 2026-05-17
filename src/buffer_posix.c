@@ -23,7 +23,6 @@ static void frame_set_fd_handle(texlink_frame_t *frame,
                                 uint32_t flags) {
   if (!frame)
     return;
-  frame->handle.version = 1;
   frame->handle.type = type;
   frame->handle.flags = flags;
   frame->handle.value.fd = fd;
@@ -381,7 +380,6 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
     return -ENOENT;
 
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = type;
   out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   out_handle->value.fd = fd;
@@ -403,7 +401,6 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
     return -errno;
 
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = type;
   out_handle->flags =
       TEXLINK_NATIVE_HANDLE_FLAG_OWNED | TEXLINK_NATIVE_HANDLE_FLAG_DUPLICATED;
@@ -439,7 +436,6 @@ int texlink_frame_get_sync_native_handle(texlink_frame_t *frame,
   if (frame->sync_fd < 0)
     return -ENOENT;
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = type;
   out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   out_handle->value.fd = frame->sync_fd;

@@ -118,7 +118,6 @@ texlink_egl_texture_frame_create(const texlink_egl_texture_frame_desc_t *desc) {
     return NULL;
 
   texture_frame->frame = texlink_frame_create(&(texlink_frame_desc_t){
-      .version = 1,
       .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
@@ -128,7 +127,6 @@ texlink_egl_texture_frame_create(const texlink_egl_texture_frame_desc_t *desc) {
     goto err;
 
   texture_frame->image = texlink_egl_image_import(&(texlink_egl_import_desc_t){
-      .version = 1,
       .display = desc->display,
       .frame = texture_frame->frame,
   });
@@ -216,13 +214,11 @@ texlink_egl_frame_wrap_texture_2d(const texlink_egl_wrap_texture_desc_t *desc) {
   eglDestroyImage(desc->display, image);
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
       .value.fd = fds[0],
   };
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .version = 1,
       .type = desc->type ? (texlink_frame_type_t)desc->type
                          : TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,

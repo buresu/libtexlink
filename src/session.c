@@ -33,7 +33,6 @@ static void session_free_consumer_frames(texlink_session_t *s) {
     texlink_frame_unmap_ipc_view(frame);
     if (frame->sync_fd >= 0) {
       texlink_native_handle_t sync_handle = {
-          .version = 1,
           .type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
           .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
           .value.fd = frame->sync_fd,
@@ -202,7 +201,6 @@ static texlink_frame_t *session_consumer_acquire(texlink_session_t *s) {
     texlink_wait_sync_file(sync_fd, 5000);
     if (s->frames[idx]->sync_fd >= 0) {
       texlink_native_handle_t old_sync = {
-          .version = 1,
           .type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
           .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
           .value.fd = s->frames[idx]->sync_fd,

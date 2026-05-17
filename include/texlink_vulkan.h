@@ -11,7 +11,6 @@ extern "C" {
 typedef struct texlink_vk_image texlink_vk_image_t;
 
 typedef struct {
-  uint32_t version;
   VkDevice device;
   VkPhysicalDeviceMemoryProperties memory_properties;
   texlink_frame_t *frame;
@@ -21,7 +20,6 @@ typedef struct {
 } texlink_vk_import_desc_t;
 
 typedef struct {
-  uint32_t version;
   VkDevice device;
   VkPhysicalDeviceMemoryProperties memory_properties;
   uint32_t width;
@@ -32,7 +30,6 @@ typedef struct {
 } texlink_vk_image_frame_desc_t;
 
 typedef struct {
-  uint32_t version;
   VkDevice device;
   VkImage image;
   VkDeviceMemory memory;

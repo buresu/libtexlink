@@ -212,7 +212,6 @@ int main(int argc, char **argv) {
   for (int i = 0; i < FRAME_COUNT; i++) {
     texture_frames[i] = texlink_d3d11_texture_frame_create(
         &(texlink_d3d11_texture_frame_desc_t){
-            .version = 1,
             .device = device,
             .width = WIDTH,
             .height = HEIGHT,
@@ -229,7 +228,6 @@ int main(int argc, char **argv) {
     }
     frames[i] = texlink_d3d11_texture_frame_frame(texture_frames[i]);
     texlink_native_handle_t sync_handle = {
-        .version = 1,
         .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
         .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
         .value.ptr = bridge.shared_fence,
@@ -253,7 +251,6 @@ int main(int argc, char **argv) {
   }
 
   texlink_server_t *server = texlink_server_create(&(texlink_server_desc_t){
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_D3D11,
       .frames = frames,

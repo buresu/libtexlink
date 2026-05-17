@@ -71,8 +71,6 @@ typedef struct texlink_server texlink_server_t;
 typedef struct texlink_client texlink_client_t;
 
 typedef struct {
-  uint32_t version;
-
   texlink_frame_type_t type;
   uint32_t width;
   uint32_t height;
@@ -106,11 +104,9 @@ typedef enum {
 } texlink_native_handle_flags_t;
 
 typedef struct {
-  uint32_t version;
 
   texlink_native_handle_type_t type;
   uint32_t flags;
-
   union {
     int fd;
     void *ptr;
@@ -119,9 +115,9 @@ typedef struct {
 } texlink_native_handle_t;
 
 typedef struct {
-  uint32_t version;
-
   texlink_frame_type_t type;
+  texlink_backend_t backend;
+  texlink_native_handle_t handle;
   uint32_t width;
   uint32_t height;
   uint32_t depth;
@@ -129,9 +125,6 @@ typedef struct {
   uint32_t stride;
   uint64_t modifier;
   uint64_t size;
-
-  texlink_backend_t backend;
-  texlink_native_handle_t handle;
 } texlink_frame_native_desc_t;
 
 typedef enum {
@@ -140,7 +133,6 @@ typedef enum {
 } texlink_map_flags_t;
 
 typedef struct {
-  uint32_t version;
   uint32_t flags;
   uint64_t offset;
   uint64_t size;
@@ -158,20 +150,15 @@ typedef enum {
 } texlink_cpu_access_t;
 
 typedef struct {
-  uint32_t version;
   uint32_t access;
   uint64_t offset;
   uint64_t size;
 } texlink_cpu_access_desc_t;
 
 typedef struct {
-  uint32_t version;
-
+  texlink_backend_t backend;
   const char *name;
   const char *path;
-
-  texlink_backend_t backend;
-
   texlink_frame_t **frames;
   uint32_t frame_count;
 
@@ -179,13 +166,9 @@ typedef struct {
 } texlink_server_desc_t;
 
 typedef struct {
-  uint32_t version;
-
+  texlink_backend_t backend;
   const char *name;
   const char *path;
-
-  texlink_backend_t backend;
-
   int timeout_ms;
   uint32_t flags;
 } texlink_client_desc_t;

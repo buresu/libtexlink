@@ -51,7 +51,6 @@ static int is_shared_win32_memory_handle(texlink_native_handle_type_t type) {
 static void frame_set_handle(texlink_frame_t *frame,
                              texlink_native_handle_type_t type, HANDLE handle,
                              uint32_t flags) {
-  frame->handle.version = 1;
   frame->handle.type = type;
   frame->handle.flags = flags;
   frame->handle.value.ptr = handle;
@@ -237,7 +236,6 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
     return -ENOENT;
 
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = frame->handle.type;
   out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   out_handle->value.ptr = frame->handle.value.ptr;
@@ -264,7 +262,6 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
   }
 
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = type;
   out_handle->flags = flags;
   out_handle->value.ptr = dup_handle;
@@ -309,7 +306,6 @@ int texlink_frame_get_sync_native_handle(texlink_frame_t *frame,
     return -ENOENT;
 
   memset(out_handle, 0, sizeof(*out_handle));
-  out_handle->version = 1;
   out_handle->type = type;
   out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   out_handle->value.ptr = frame->sync_handle;

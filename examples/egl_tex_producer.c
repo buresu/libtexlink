@@ -66,14 +66,12 @@ int main(void) {
   EGLDisplay dpy = eglGetCurrentDisplay();
   texlink_egl_texture_frame_t *texture_frames[2] = {
       texlink_egl_texture_frame_create(&(texlink_egl_texture_frame_desc_t){
-          .version = 1,
           .display = dpy,
           .width = WIDTH,
           .height = HEIGHT,
           .format = TEXLINK_FRAME_FORMAT_ARGB8888,
       }),
       texlink_egl_texture_frame_create(&(texlink_egl_texture_frame_desc_t){
-          .version = 1,
           .display = dpy,
           .width = WIDTH,
           .height = HEIGHT,
@@ -91,7 +89,6 @@ int main(void) {
 
   printf("Serving 'texshare'...\n");
   texlink_server_desc_t desc = {
-      .version = 1,
       .name = "texshare",
       .backend = TEXLINK_BACKEND_EGL,
       .frames = frames,

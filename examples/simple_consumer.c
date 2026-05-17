@@ -31,7 +31,6 @@ int main(int argc, char **argv) {
   printf("Connecting to \"%s\" ...\n", name);
 
   texlink_client_desc_t desc = {
-      .version = 1,
       .name = name,
       .backend = TEXLINK_BACKEND_CPU,
       .timeout_ms = 5000,
@@ -49,7 +48,6 @@ int main(int argc, char **argv) {
   uint32_t frame_count = texlink_client_frame_count(client);
   texlink_mapping_t mappings[3] = {0};
   texlink_map_desc_t map_desc = {
-      .version = 1,
       .flags = TEXLINK_MAP_READ,
       .offset = 0,
       .size = 0,
@@ -72,7 +70,6 @@ int main(int argc, char **argv) {
 
     texlink_meta_t cur_meta = texlink_client_meta(client);
     texlink_cpu_access_desc_t access_desc = {
-        .version = 1,
         .access = TEXLINK_CPU_ACCESS_READ,
         .offset = 0,
         .size = 0,

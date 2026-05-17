@@ -98,7 +98,6 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
       return -1;
   }
 
-  frame->handle.version = 1;
   frame->handle.type = type;
   frame->handle.flags = type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE
                             ? TEXLINK_NATIVE_HANDLE_FLAG_BORROWED

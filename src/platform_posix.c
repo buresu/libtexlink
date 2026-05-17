@@ -99,7 +99,6 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
   if (texlink_recv_ipc_handles(sock, &fd, 1) < 0)
     return -1;
 
-  frame->handle.version = 1;
   frame->handle.type = type;
   frame->handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
   frame->handle.value.fd = fd;

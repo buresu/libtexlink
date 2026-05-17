@@ -172,14 +172,12 @@ texlink_frame_t *texlink_d3d12_frame_wrap_resource(
   uint64_t size = desc->size ? desc->size : (uint64_t)stride * height;
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
       .flags = flags,
       .value.ptr = shared,
   };
   return texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = width,
           .height = height,
@@ -212,7 +210,6 @@ texlink_d3d12_texture_frame_t *texlink_d3d12_texture_frame_create(
 
   tf->frame = texlink_d3d12_frame_wrap_resource(
       &(texlink_d3d12_wrap_resource_desc_t){
-          .version = 1,
           .device = tf->device,
           .resource = tf->resource,
           .shared_handle = shared,
@@ -318,14 +315,12 @@ texlink_d3d12_fence_frame_create(const texlink_d3d12_fence_frame_desc_t *desc) {
     goto err;
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
       .value.ptr = shared,
   };
   ff->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_RAW,
           .width = 1,
           .height = 1,

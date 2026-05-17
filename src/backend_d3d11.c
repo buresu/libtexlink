@@ -244,14 +244,12 @@ texlink_frame_t *texlink_d3d11_frame_wrap_texture(
   uint64_t size = desc->size ? desc->size : (uint64_t)stride * height;
 
   texlink_native_handle_t handle = {
-      .version = 1,
       .type = handle_type,
       .flags = handle_flags,
       .value.ptr = shared,
   };
   return texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .version = 1,
           .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = width,
           .height = height,
@@ -285,7 +283,6 @@ texlink_d3d11_texture_frame_t *texlink_d3d11_texture_frame_create(
 
   tf->frame = texlink_d3d11_frame_wrap_texture(
       &(texlink_d3d11_wrap_texture_desc_t){
-          .version = 1,
           .texture = tf->texture,
           .shared_handle = shared,
           .width = desc->width,
