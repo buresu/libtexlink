@@ -41,11 +41,11 @@ int main(int argc, char **argv) {
   /* Double-buffering: two raw frames */
   texlink_frame_t *frames[2] = {
       texlink_frame_create(&(texlink_frame_desc_t){
-          .type = TEXLINK_FRAME_TYPE_RAW,
+          .frame_type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
       texlink_frame_create(&(texlink_frame_desc_t){
-          .type = TEXLINK_FRAME_TYPE_RAW,
+          .frame_type = TEXLINK_FRAME_TYPE_RAW,
           .size = BUF_SIZE,
       }),
   };
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
   printf("Serving \"%s\"...\n", name);
   texlink_server_desc_t desc = {
       .name = name,
-      .backend = TEXLINK_BACKEND_CPU,
+      .backend_type = TEXLINK_BACKEND_CPU,
       .frames = frames,
       .frame_count = 2,
   };

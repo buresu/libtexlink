@@ -277,20 +277,20 @@ texlink_wgl_texture_frame_create(const texlink_wgl_texture_frame_desc_t *desc) {
     goto err;
 
   texlink_native_handle_t handle = {
-      .type = handle_type,
+      .handle_type = handle_type,
       .flags = handle_flags,
       .value.ptr = shared,
   };
   tf->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = desc->width,
           .height = desc->height,
           .depth = 1,
           .format = format,
           .stride = default_stride(desc->width, format),
           .size = (uint64_t)default_stride(desc->width, format) * desc->height,
-          .backend = TEXLINK_BACKEND_WGL,
+          .backend_type = TEXLINK_BACKEND_WGL,
           .handle = handle,
       });
   if (!tf->frame) {
@@ -327,7 +327,7 @@ texlink_wgl_texture_frame_import(const texlink_wgl_import_desc_t *desc) {
   tf->frame = desc->frame;
 
   if (create_device(tf) != 0 ||
-      open_shared_texture(tf, (HANDLE)handle.value.ptr, handle.type) != 0 ||
+      open_shared_texture(tf, (HANDLE)handle.value.ptr, handle.handle_type) != 0 ||
       register_gl_texture(tf) != 0)
     goto err;
 

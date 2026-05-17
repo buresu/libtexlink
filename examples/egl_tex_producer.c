@@ -90,7 +90,7 @@ int main(void) {
   printf("Serving 'texshare'...\n");
   texlink_server_desc_t desc = {
       .name = "texshare",
-      .backend = TEXLINK_BACKEND_EGL,
+      .backend_type = TEXLINK_BACKEND_EGL,
       .frames = frames,
       .frame_count = 2,
   };

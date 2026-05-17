@@ -191,7 +191,7 @@ int main(int argc, char **argv) {
     }
     frames[i] = texlink_wgl_texture_frame_frame(texture_frames[i]);
     texlink_native_handle_t sync_handle = {
-        .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+        .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
         .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
         .value.ptr = bridge.shared_fence,
     };
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
 
   texlink_server_t *server = texlink_server_create(&(texlink_server_desc_t){
       .name = name,
-      .backend = TEXLINK_BACKEND_WGL,
+      .backend_type = TEXLINK_BACKEND_WGL,
       .frames = frames,
       .frame_count = FRAME_COUNT,
   });

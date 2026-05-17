@@ -118,7 +118,7 @@ texlink_egl_texture_frame_create(const texlink_egl_texture_frame_desc_t *desc) {
     return NULL;
 
   texture_frame->frame = texlink_frame_create(&(texlink_frame_desc_t){
-      .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+      .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
       .format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888,
@@ -214,12 +214,12 @@ texlink_egl_frame_wrap_texture_2d(const texlink_egl_wrap_texture_desc_t *desc) {
   eglDestroyImage(desc->display, image);
 
   texlink_native_handle_t handle = {
-      .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+      .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
       .value.fd = fds[0],
   };
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .type = desc->type ? (texlink_frame_type_t)desc->type
+      .frame_type = desc->target ? (texlink_frame_type_t)desc->target
                          : TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
@@ -228,7 +228,7 @@ texlink_egl_frame_wrap_texture_2d(const texlink_egl_wrap_texture_desc_t *desc) {
       .stride = (uint32_t)strides[0],
       .modifier = modifiers[0],
       .size = (uint64_t)strides[0] * desc->height,
-      .backend = TEXLINK_BACKEND_EGL,
+      .backend_type = TEXLINK_BACKEND_EGL,
       .handle = handle,
   });
 }

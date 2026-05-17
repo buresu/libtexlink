@@ -172,20 +172,20 @@ texlink_frame_t *texlink_d3d12_frame_wrap_resource(
   uint64_t size = desc->size ? desc->size : (uint64_t)stride * height;
 
   texlink_native_handle_t handle = {
-      .type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
+      .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
       .flags = flags,
       .value.ptr = shared,
   };
   return texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = width,
           .height = height,
           .depth = 1,
           .format = format,
           .stride = stride,
           .size = size,
-          .backend = TEXLINK_BACKEND_D3D12,
+          .backend_type = TEXLINK_BACKEND_D3D12,
           .handle = handle,
       });
 }
@@ -315,20 +315,20 @@ texlink_d3d12_fence_frame_create(const texlink_d3d12_fence_frame_desc_t *desc) {
     goto err;
 
   texlink_native_handle_t handle = {
-      .type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
+      .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
       .value.ptr = shared,
   };
   ff->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .type = TEXLINK_FRAME_TYPE_RAW,
+          .frame_type = TEXLINK_FRAME_TYPE_RAW,
           .width = 1,
           .height = 1,
           .depth = 1,
           .format = TEXLINK_FRAME_FORMAT_UNKNOWN,
           .stride = 0,
           .size = 1,
-          .backend = TEXLINK_BACKEND_D3D12,
+          .backend_type = TEXLINK_BACKEND_D3D12,
           .handle = handle,
       });
   if (!ff->frame) {

@@ -250,7 +250,7 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
   if (!desc || desc->width == 0 || desc->height == 0)
     return NULL;
   texlink_native_handle_t handle = desc->handle;
-  if (handle.type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
+  if (handle.handle_type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
     if (!desc->device || !desc->memory)
       return NULL;
 
@@ -271,18 +271,18 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
         !win32_handle)
       return NULL;
 
-    handle.type = TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
+    handle.handle_type = TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
     handle.value.ptr = win32_handle;
   }
 
-  if (!vk_external_memory_handle_type(handle.type))
+  if (!vk_external_memory_handle_type(handle.handle_type))
     return NULL;
   if (!handle.flags)
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
 
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+      .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
       .depth = 1,
@@ -290,7 +290,7 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
       .stride = desc->stride,
       .modifier = desc->modifier,
       .size = desc->size,
-      .backend = TEXLINK_BACKEND_VULKAN,
+      .backend_type = TEXLINK_BACKEND_VULKAN,
       .handle = handle,
   });
 }

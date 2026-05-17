@@ -50,7 +50,7 @@ int main(void) {
   printf("Connecting to 'texshare'...\n");
   texlink_client_desc_t desc = {
       .name = "texshare",
-      .backend = TEXLINK_BACKEND_EGL,
+      .backend_type = TEXLINK_BACKEND_EGL,
       .timeout_ms = 5000,
   };
   texlink_client_t *client = texlink_client_create(&desc);
@@ -143,7 +143,7 @@ int main(void) {
     glBindTexture(GL_TEXTURE_2D, textures[idx]);
     glUniform1i(tex_loc, 0);
     glUniform1i(flip_y_loc,
-                texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+                texlink_frame_should_flip_y((texlink_backend_t)meta.backend_type,
                                             TEXLINK_BACKEND_EGL));
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);

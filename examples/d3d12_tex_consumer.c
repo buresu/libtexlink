@@ -649,7 +649,7 @@ int main(int argc, char **argv) {
 
   texlink_client_t *client = texlink_client_create(&(texlink_client_desc_t){
       .name = name,
-      .backend = TEXLINK_BACKEND_D3D12,
+      .backend_type = TEXLINK_BACKEND_D3D12,
       .timeout_ms = 5000,
   });
   if (!client || texlink_client_connect(client) != 0) {
@@ -725,7 +725,7 @@ int main(int argc, char **argv) {
     unsigned char bgra[4] = {0};
     ID3D12Resource *resource =
         texlink_d3d12_texture_frame_resource(texture_frames[idx]);
-    int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+    int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta.backend_type,
                                              TEXLINK_BACKEND_D3D12);
     if (present_texture_draw(&ctx, resource, idx, flip_y) != 0 &&
         present_texture_copy(&ctx, resource) != 0) {

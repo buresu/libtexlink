@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
   texlink_client_desc_t desc = {
       .name = name,
-      .backend = TEXLINK_BACKEND_CPU,
+      .backend_type = TEXLINK_BACKEND_CPU,
       .timeout_ms = 5000,
   };
   texlink_client_t *client = texlink_client_create(&desc);

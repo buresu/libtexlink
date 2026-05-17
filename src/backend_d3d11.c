@@ -244,20 +244,20 @@ texlink_frame_t *texlink_d3d11_frame_wrap_texture(
   uint64_t size = desc->size ? desc->size : (uint64_t)stride * height;
 
   texlink_native_handle_t handle = {
-      .type = handle_type,
+      .handle_type = handle_type,
       .flags = handle_flags,
       .value.ptr = shared,
   };
   return texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = width,
           .height = height,
           .depth = 1,
           .format = format,
           .stride = stride,
           .size = size,
-          .backend = TEXLINK_BACKEND_D3D11,
+          .backend_type = TEXLINK_BACKEND_D3D11,
           .handle = handle,
       });
 }
@@ -325,7 +325,7 @@ texlink_d3d11_texture_frame_t *texlink_d3d11_texture_frame_import(
   tf->frame = desc->frame;
 
   if (set_device(tf, desc->device) != 0 ||
-      open_shared_texture(tf, (HANDLE)handle.value.ptr, handle.type) != 0)
+      open_shared_texture(tf, (HANDLE)handle.value.ptr, handle.handle_type) != 0)
     goto err;
 
   return tf;

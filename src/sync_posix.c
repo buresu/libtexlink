@@ -56,7 +56,7 @@ static uint64_t dma_buf_sync_flags(uint32_t access) {
 }
 
 static int frame_needs_dma_buf_sync(texlink_frame_t *frame) {
-  return frame->handle.type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD;
+  return frame->handle.handle_type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD;
 }
 
 static int map_prot(uint32_t flags) {

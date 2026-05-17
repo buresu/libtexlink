@@ -147,7 +147,7 @@ struct texlink_server {
   texlink_shm_t *shm;
   texlink_frame_t **frames;
   uint32_t frame_count;
-  texlink_backend_t backend;
+  texlink_backend_t backend_type;
   texlink_state_t state;
   int last_error;
   int write_idx;
@@ -160,7 +160,7 @@ struct texlink_server {
 
 struct texlink_client {
   texlink_session_t *session;
-  texlink_backend_t backend;
+  texlink_backend_t backend_type;
   texlink_state_t state;
   int last_error;
   int timeout_ms;

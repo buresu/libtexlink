@@ -309,7 +309,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
   int32_t sw = (int32_t)ctx->sc_extent.width;
   int32_t sh = (int32_t)ctx->sc_extent.height;
   /* EGL/OpenGL stores rows bottom-up; flip Y so the image appears correct. */
-  int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta->backend,
+  int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta->backend_type,
                                            TEXLINK_BACKEND_VULKAN);
   VkImageBlit region = {
       .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
@@ -413,7 +413,7 @@ int main(void) {
   printf("Connecting to '%s'...\n", name);
   texlink_client_desc_t desc = {
       .name = name,
-      .backend = TEXLINK_BACKEND_VULKAN,
+      .backend_type = TEXLINK_BACKEND_VULKAN,
       .timeout_ms = 5000,
   };
   texlink_client_t *client = texlink_client_create(&desc);

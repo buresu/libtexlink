@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
 
   texlink_client_t *client = texlink_client_create(&(texlink_client_desc_t){
       .name = name,
-      .backend = TEXLINK_BACKEND_WGL,
+      .backend_type = TEXLINK_BACKEND_WGL,
       .timeout_ms = 5000,
   });
   if (!client || texlink_client_connect(client) != 0) {
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
     glfwGetFramebufferSize(window, &fb_w, &fb_h);
     draw_textured_quad(
         texlink_wgl_texture_frame_texture(texture_frame), fb_w, fb_h,
-        texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+        texlink_frame_should_flip_y((texlink_backend_t)meta.backend_type,
                                     TEXLINK_BACKEND_WGL));
     glFinish();
     texlink_wgl_texture_frame_unlock(texture_frame);

@@ -144,20 +144,20 @@ static int create_d3d11_shared_frame(SharedImage *img) {
     return -1;
 
   texlink_native_handle_t handle = {
-      .type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
+      .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
       .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
       .value.ptr = img->shared_handle,
   };
   img->frame = texlink_frame_create_from_native_handle(
       &(texlink_frame_native_desc_t){
-          .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
           .width = WIDTH,
           .height = HEIGHT,
           .depth = 1,
           .format = TEXLINK_FRAME_FORMAT_ARGB8888,
           .stride = WIDTH * 4,
           .size = WIDTH * HEIGHT * 4,
-          .backend = TEXLINK_BACKEND_VULKAN,
+          .backend_type = TEXLINK_BACKEND_VULKAN,
           .handle = handle,
       });
   return img->frame ? 0 : -1;
@@ -589,7 +589,7 @@ int main(void) {
   printf("Serving '%s'...\n", name);
   texlink_server_desc_t desc = {
       .name = name,
-      .backend = TEXLINK_BACKEND_VULKAN,
+      .backend_type = TEXLINK_BACKEND_VULKAN,
       .frames = frames,
       .frame_count = 2,
   };

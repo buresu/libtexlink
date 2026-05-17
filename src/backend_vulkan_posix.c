@@ -165,7 +165,7 @@ texlink_vk_image_frame_create(const texlink_vk_image_frame_desc_t *desc) {
 
   uint32_t format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888;
   texlink_frame_t *frame = texlink_frame_create(&(texlink_frame_desc_t){
-      .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+      .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
       .format = format,
@@ -189,7 +189,7 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
   if (!desc || desc->width == 0 || desc->height == 0)
     return NULL;
   texlink_native_handle_t handle = desc->handle;
-  if (handle.type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
+  if (handle.handle_type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
     if (!desc->device || !desc->memory)
       return NULL;
 
@@ -208,18 +208,18 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
     if (get_memory_fd(desc->device, &fd_info, &fd) != VK_SUCCESS || fd < 0)
       return NULL;
     handle = (texlink_native_handle_t){
-        .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+        .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
         .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
         .value.fd = fd,
     };
-  } else if (handle.type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) {
+  } else if (handle.handle_type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) {
     return NULL;
   }
 
   if (!handle.flags)
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
-      .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+      .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,
       .height = desc->height,
       .depth = 1,
@@ -227,7 +227,7 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
       .stride = desc->stride,
       .modifier = desc->modifier,
       .size = desc->size,
-      .backend = TEXLINK_BACKEND_VULKAN,
+      .backend_type = TEXLINK_BACKEND_VULKAN,
       .handle = handle,
   });
 }

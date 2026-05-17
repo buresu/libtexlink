@@ -30,7 +30,7 @@ static int normalize_range(uint64_t frame_size, uint64_t offset,
 }
 
 static int frame_is_mappable(texlink_frame_t *frame) {
-  return frame->handle.type == TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
+  return frame->handle.handle_type == TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
 }
 
 int texlink_frame_map(texlink_frame_t *frame, const texlink_map_desc_t *desc,

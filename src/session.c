@@ -33,7 +33,7 @@ static void session_free_consumer_frames(texlink_session_t *s) {
     texlink_frame_unmap_ipc_view(frame);
     if (frame->sync_fd >= 0) {
       texlink_native_handle_t sync_handle = {
-          .type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
+          .handle_type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
           .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
           .value.fd = frame->sync_fd,
       };
@@ -201,7 +201,7 @@ static texlink_frame_t *session_consumer_acquire(texlink_session_t *s) {
     texlink_wait_sync_file(sync_fd, 5000);
     if (s->frames[idx]->sync_fd >= 0) {
       texlink_native_handle_t old_sync = {
-          .type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
+          .handle_type = TEXLINK_NATIVE_HANDLE_SYNC_FD,
           .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
           .value.fd = s->frames[idx]->sync_fd,
       };
@@ -253,7 +253,7 @@ texlink_server_t *texlink_server_create(const texlink_server_desc_t *desc) {
   server->frame_count = desc->frame_count;
   for (uint32_t i = 0; i < server->frame_count; i++)
     server->frames[i]->index = (int)i;
-  server->backend = desc->backend;
+  server->backend_type = desc->backend_type;
   server->flags = desc->flags;
   server->state = TEXLINK_STATE_CREATED;
 
@@ -309,7 +309,7 @@ int texlink_server_start(texlink_server_t *server) {
   atomic_store(&server->shm->current_idx, 0);
   server->shm->buf_count = server->frame_count;
   server->shm->meta = server->frames[0]->meta;
-  server->shm->meta.backend = (uint32_t)server->backend;
+  server->shm->meta.backend_type = (uint32_t)server->backend_type;
   if (server->shm->meta.handle_type == TEXLINK_NATIVE_HANDLE_UNKNOWN)
     server->shm->meta.handle_type =
         (uint32_t)texlink_default_native_handle_type();
@@ -512,7 +512,7 @@ texlink_client_t *texlink_client_create(const texlink_client_desc_t *desc) {
   if (!client)
     return NULL;
 
-  client->backend = desc->backend;
+  client->backend_type = desc->backend_type;
   client->timeout_ms = desc->timeout_ms;
   client->flags = desc->flags;
   client->state = TEXLINK_STATE_CREATED;

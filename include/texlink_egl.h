@@ -29,7 +29,7 @@ typedef struct {
   unsigned int texture;
   uint32_t width;
   uint32_t height;
-  uint32_t type;
+  uint32_t target;
   uint32_t format;
 } texlink_egl_wrap_texture_desc_t;
 

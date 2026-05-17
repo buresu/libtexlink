@@ -287,7 +287,7 @@ int main(int argc, char **argv) {
 
   texlink_client_t *client = texlink_client_create(&(texlink_client_desc_t){
       .name = name,
-      .backend = TEXLINK_BACKEND_D3D11,
+      .backend_type = TEXLINK_BACKEND_D3D11,
       .timeout_ms = 5000,
   });
   if (!client || texlink_client_connect(client) != 0) {
@@ -400,7 +400,7 @@ int main(int argc, char **argv) {
       texlink_client_release_frame(client, frame);
       break;
     }
-    int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta.backend,
+    int flip_y = texlink_frame_should_flip_y((texlink_backend_t)meta.backend_type,
                                              TEXLINK_BACKEND_D3D11);
     present_texture(device, &target, &render, idx, flip_y);
     texlink_client_release_frame(client, frame);
