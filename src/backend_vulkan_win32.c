@@ -249,11 +249,7 @@ texlink_frame_t *
 texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
   if (!desc || desc->width == 0 || desc->height == 0)
     return NULL;
-  if (desc->size > UINT32_MAX)
-    return NULL;
-
   texlink_native_handle_t handle = desc->handle;
-  uint32_t flags = desc->flags;
   if (handle.type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
     if (!desc->device || !desc->memory)
       return NULL;
@@ -278,14 +274,11 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
     handle.type = TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
     handle.value.ptr = win32_handle;
-    flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
   }
 
   if (!vk_external_memory_handle_type(handle.type))
     return NULL;
-  if (flags)
-    handle.flags = flags;
-  if (handle.flags == TEXLINK_NATIVE_HANDLE_FLAG_NONE)
+  if (!handle.flags)
     handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
 
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){

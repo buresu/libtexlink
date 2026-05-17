@@ -104,7 +104,6 @@ typedef enum {
 } texlink_native_handle_flags_t;
 
 typedef struct {
-
   texlink_native_handle_type_t type;
   uint32_t flags;
   union {

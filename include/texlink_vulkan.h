@@ -40,7 +40,6 @@ typedef struct {
   uint32_t stride;
   uint64_t size;
   uint64_t modifier;
-  uint32_t flags;
 } texlink_vk_wrap_image_desc_t;
 
 VkFormat texlink_vk_format(uint32_t texlink_format);
