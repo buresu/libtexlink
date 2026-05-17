@@ -112,7 +112,7 @@ int texlink_frame_is_mapped(texlink_frame_t *frame) {
 }
 
 int texlink_frame_cpu_begin(texlink_frame_t *frame,
-                            const texlink_cpu_access_desc_t *desc) {
+                            const texlink_map_desc_t *desc) {
   if (!frame || !desc)
     return -EINVAL;
   if (!frame_is_mappable(frame))
@@ -137,7 +137,7 @@ int texlink_frame_cpu_begin(texlink_frame_t *frame,
 }
 
 int texlink_frame_cpu_end(texlink_frame_t *frame,
-                          const texlink_cpu_access_desc_t *desc) {
+                          const texlink_map_desc_t *desc) {
   if (!frame || !desc)
     return -EINVAL;
   if (!frame_is_mappable(frame))

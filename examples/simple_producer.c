@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     if (!frame)
       break;
 
-    texlink_cpu_access_desc_t access_desc = {
+    texlink_map_desc_t access_desc = {
         .flags = TEXLINK_MAP_WRITE,
         .offset = 0,
         .size = 0,

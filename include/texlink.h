@@ -140,12 +140,6 @@ typedef struct {
 } texlink_mapping_t;
 
 typedef struct {
-  texlink_map_flags_t flags;
-  uint64_t offset;
-  uint64_t size;
-} texlink_cpu_access_desc_t;
-
-typedef struct {
   texlink_backend_t backend_type;
   const char *name;
   const char *path;
@@ -220,9 +214,9 @@ int texlink_frame_is_mapped(texlink_frame_t *frame);
 
 /* Frame CPU access API */
 int texlink_frame_cpu_begin(texlink_frame_t *frame,
-                            const texlink_cpu_access_desc_t *desc);
+                            const texlink_map_desc_t *desc);
 int texlink_frame_cpu_end(texlink_frame_t *frame,
-                          const texlink_cpu_access_desc_t *desc);
+                          const texlink_map_desc_t *desc);
 
 /* Name-based discovery */
 #define TEXLINK_NAME_MAX 64
