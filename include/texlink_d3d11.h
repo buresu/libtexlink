@@ -38,7 +38,7 @@ typedef struct {
   uint32_t format;
   uint32_t stride;
   uint64_t size;
-  texlink_native_handle_flags_t flags;
+  int owned;
 } texlink_d3d11_wrap_texture_desc_t;
 
 DXGI_FORMAT texlink_d3d11_format(uint32_t texlink_format);

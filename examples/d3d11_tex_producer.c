@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
     frames[i] = texlink_d3d11_texture_frame_frame(texture_frames[i]);
     texlink_native_handle_t sync_handle = {
         .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
-        .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+        .owned = 0,
         .value.ptr = bridge.shared_fence,
     };
     if (texlink_frame_set_sync_native_handle(frames[i], &sync_handle, 0) != 0) {

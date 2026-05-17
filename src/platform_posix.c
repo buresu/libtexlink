@@ -100,7 +100,7 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
     return -1;
 
   frame->handle.handle_type = type;
-  frame->handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+  frame->handle.owned = 1;
   frame->handle.value.fd = fd;
   frame->meta.handle_type = (uint32_t)type;
   frame->dma_fd = (type == TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) ? fd : -1;
@@ -138,7 +138,7 @@ int texlink_frame_send_sync_handle(texlink_socket_t sock,
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
   if (!frame)
     return;
-  if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+  if (frame->handle.owned &&
       texlink_native_handle_type_is_ipc(frame->handle.handle_type) &&
       frame->handle.value.fd >= 0) {
     close(frame->handle.value.fd);

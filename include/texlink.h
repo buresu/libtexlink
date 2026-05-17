@@ -93,19 +93,12 @@ typedef enum {
   TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
 } texlink_native_handle_type_t;
 
-typedef enum {
-  TEXLINK_NATIVE_HANDLE_FLAG_NONE = 0,
-  TEXLINK_NATIVE_HANDLE_FLAG_BORROWED = 1u << 0,
-  TEXLINK_NATIVE_HANDLE_FLAG_OWNED = 1u << 1,
-} texlink_native_handle_flags_t;
-
 typedef struct {
   texlink_native_handle_type_t handle_type;
-  texlink_native_handle_flags_t flags;
+  int owned;
   union {
     int fd;
     void *ptr;
-    uint64_t u64;
   } value;
 } texlink_native_handle_t;
 

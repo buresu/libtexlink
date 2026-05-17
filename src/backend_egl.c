@@ -215,7 +215,7 @@ texlink_egl_frame_wrap_texture_2d(const texlink_egl_wrap_texture_desc_t *desc) {
 
   texlink_native_handle_t handle = {
       .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-      .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
+      .owned = 1,
       .value.fd = fds[0],
   };
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){

@@ -145,7 +145,7 @@ static int create_d3d11_shared_frame(SharedImage *img) {
 
   texlink_native_handle_t handle = {
       .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
-      .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+      .owned = 0,
       .value.ptr = img->shared_handle,
   };
   img->frame = texlink_frame_create_from_native_handle(

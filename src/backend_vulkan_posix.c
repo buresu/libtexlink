@@ -209,15 +209,13 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
       return NULL;
     handle = (texlink_native_handle_t){
         .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-        .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
+        .owned = 1,
         .value.fd = fd,
     };
   } else if (handle.handle_type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) {
     return NULL;
   }
 
-  if (!handle.flags)
-    handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
       .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,

@@ -441,7 +441,7 @@ int main(int argc, char **argv) {
     }
     texlink_native_handle_t sync_handle = {
         .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
-        .flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
+        .owned = 0,
         .value.ptr = ctx.shared_fence,
     };
     if (texlink_frame_set_sync_native_handle(frames[i], &sync_handle, 0) != 0) {

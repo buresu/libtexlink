@@ -156,12 +156,12 @@ texlink_frame_t *texlink_d3d12_frame_wrap_resource(
   D3D12_RESOURCE_DESC rd;
   desc->resource->lpVtbl->GetDesc(desc->resource, &rd);
   HANDLE shared = desc->shared_handle;
-  texlink_native_handle_flags_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  int owned = 0;
   if (!shared) {
     if (create_shared_handle(desc->device, (ID3D12DeviceChild *)desc->resource,
                              &shared) != 0)
       return NULL;
-    flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    owned = 1;
   }
 
   uint32_t format =
@@ -173,7 +173,7 @@ texlink_frame_t *texlink_d3d12_frame_wrap_resource(
 
   texlink_native_handle_t handle = {
       .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE,
-      .flags = flags,
+      .owned = owned,
       .value.ptr = shared,
   };
   return texlink_frame_create_from_native_handle(
@@ -316,7 +316,7 @@ texlink_d3d12_fence_frame_create(const texlink_d3d12_fence_frame_desc_t *desc) {
 
   texlink_native_handle_t handle = {
       .handle_type = TEXLINK_NATIVE_HANDLE_D3D12_FENCE_HANDLE,
-      .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
+      .owned = 1,
       .value.ptr = shared,
   };
   ff->frame = texlink_frame_create_from_native_handle(

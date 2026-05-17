@@ -152,7 +152,7 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
                                  uint32_t width, uint32_t height,
                                  uint32_t format, HANDLE *out_shared,
                                  texlink_native_handle_type_t *out_type,
-                                 texlink_native_handle_flags_t *out_flags) {
+                                 int *out_owned) {
   D3D11_TEXTURE2D_DESC td;
   memset(&td, 0, sizeof(td));
   td.Width = width;
@@ -189,7 +189,7 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
     if (FAILED(hr) || !*out_shared)
       return fail("IDXGIResource1::CreateSharedHandle failed", -EIO);
     *out_type = TEXLINK_NATIVE_HANDLE_D3D12_SHARED_HANDLE;
-    *out_flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    *out_owned = 1;
     return 0;
   }
 
@@ -204,7 +204,7 @@ static int create_shared_texture(texlink_wgl_texture_frame_t *tf,
   if (FAILED(hr) || !*out_shared)
     return fail("IDXGIResource::GetSharedHandle failed", -EIO);
   *out_type = TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE;
-  *out_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  *out_owned = 0;
   return 0;
 }
 
@@ -269,16 +269,16 @@ texlink_wgl_texture_frame_create(const texlink_wgl_texture_frame_desc_t *desc) {
 
   HANDLE shared = NULL;
   texlink_native_handle_type_t handle_type = TEXLINK_NATIVE_HANDLE_UNKNOWN;
-  texlink_native_handle_flags_t handle_flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  int handle_owned = 0;
   if (create_device(tf) != 0 ||
       create_shared_texture(tf, desc->width, desc->height, format, &shared,
-                            &handle_type, &handle_flags) != 0 ||
+                            &handle_type, &handle_owned) != 0 ||
       register_gl_texture(tf) != 0)
     goto err;
 
   texlink_native_handle_t handle = {
       .handle_type = handle_type,
-      .flags = handle_flags,
+      .owned = handle_owned,
       .value.ptr = shared,
   };
   tf->frame = texlink_frame_create_from_native_handle(

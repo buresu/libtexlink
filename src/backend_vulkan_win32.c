@@ -272,14 +272,12 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
       return NULL;
 
     handle.handle_type = TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE;
-    handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    handle.owned = 1;
     handle.value.ptr = win32_handle;
   }
 
   if (!vk_external_memory_handle_type(handle.handle_type))
     return NULL;
-  if (!handle.flags)
-    handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
 
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
       .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,

@@ -99,9 +99,7 @@ int texlink_frame_recv_native_handle(texlink_socket_t sock,
   }
 
   frame->handle.handle_type = type;
-  frame->handle.flags = type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE
-                            ? TEXLINK_NATIVE_HANDLE_FLAG_BORROWED
-                            : TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+  frame->handle.owned = (type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) ? 0 : 1;
   frame->handle.value.ptr = handle;
   frame->win32_handle = handle;
   frame->meta.handle_type = (uint32_t)type;
@@ -154,7 +152,7 @@ int texlink_frame_send_sync_handle(texlink_socket_t sock,
 void texlink_frame_close_ipc_handle(texlink_frame_t *frame) {
   if (!frame)
     return;
-  if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+  if (frame->handle.owned &&
       texlink_native_handle_type_is_ipc(frame->handle.handle_type) &&
       frame->handle.value.ptr) {
     CloseHandle((HANDLE)frame->handle.value.ptr);

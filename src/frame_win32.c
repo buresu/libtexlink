@@ -50,9 +50,9 @@ static int is_shared_win32_memory_handle(texlink_native_handle_type_t type) {
 
 static void frame_set_handle(texlink_frame_t *frame,
                              texlink_native_handle_type_t type, HANDLE handle,
-                             uint32_t flags) {
+                             int owned) {
   frame->handle.handle_type = type;
-  frame->handle.flags = flags;
+  frame->handle.owned = owned;
   frame->handle.value.ptr = handle;
   frame->win32_handle = handle;
   frame->meta.handle_type = (uint32_t)type;
@@ -75,7 +75,7 @@ static texlink_frame_t *alloc_mapping(size_t size, uint32_t w, uint32_t h,
   }
 
   frame_set_handle(frame, TEXLINK_NATIVE_HANDLE_OPAQUE_WIN32_HANDLE, mapping,
-                   TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
+                   1);
   frame->sync_fd = -1;
   frame->sync_handle = NULL;
   frame->index = -1;
@@ -131,7 +131,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
     return NULL;
 
   HANDLE handle = (HANDLE)desc->handle.value.ptr;
-  if (!(desc->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+  if (!desc->handle.owned &&
       desc->handle.handle_type != TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
     HANDLE dup_handle = NULL;
     if (!DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(),
@@ -148,8 +148,8 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
 
   frame_set_handle(frame, desc->handle.handle_type, handle,
                    desc->handle.handle_type == TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE
-                       ? desc->handle.flags
-                       : TEXLINK_NATIVE_HANDLE_FLAG_OWNED);
+                       ? desc->handle.owned
+                       : 1);
   frame->sync_fd = -1;
   frame->sync_handle = NULL;
   frame->index = -1;
@@ -174,7 +174,7 @@ void texlink_frame_destroy(texlink_frame_t *frame) {
     return;
   if (frame->map_base)
     UnmapViewOfFile(frame->map_base);
-  if ((frame->handle.flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED) &&
+  if (frame->handle.owned &&
       is_win32_handle_type(frame->handle.handle_type) && frame->handle.value.ptr)
     CloseHandle((HANDLE)frame->handle.value.ptr);
   if (frame->sync_handle)
@@ -237,7 +237,7 @@ int texlink_frame_get_native_handle(texlink_frame_t *frame,
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->handle_type = frame->handle.handle_type;
-  out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  out_handle->owned = 0;
   out_handle->value.ptr = frame->handle.value.ptr;
   return 0;
 }
@@ -251,18 +251,18 @@ int texlink_frame_dup_native_handle(texlink_frame_t *frame,
     return ret;
 
   HANDLE dup_handle = (HANDLE)borrowed.value.ptr;
-  texlink_native_handle_flags_t flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  int owned = 0;
   if (type != TEXLINK_NATIVE_HANDLE_D3D11_SHARED_HANDLE) {
     if (!DuplicateHandle(GetCurrentProcess(), (HANDLE)borrowed.value.ptr,
                          GetCurrentProcess(), &dup_handle, 0, FALSE,
                          DUPLICATE_SAME_ACCESS))
       return -EIO;
-    flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    owned = 1;
   }
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->handle_type = type;
-  out_handle->flags = flags;
+  out_handle->owned = owned;
   out_handle->value.ptr = dup_handle;
   return 0;
 }
@@ -277,7 +277,7 @@ int texlink_frame_set_sync_native_handle(texlink_frame_t *frame,
     return -ENOTSUP;
 
   HANDLE sync_handle = (HANDLE)handle->value.ptr;
-  if (!(handle->flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED)) {
+  if (!handle->owned) {
     HANDLE dup_handle = NULL;
     if (!DuplicateHandle(GetCurrentProcess(), sync_handle, GetCurrentProcess(),
                          &dup_handle, 0, FALSE, DUPLICATE_SAME_ACCESS))
@@ -306,7 +306,7 @@ int texlink_frame_get_sync_native_handle(texlink_frame_t *frame,
 
   memset(out_handle, 0, sizeof(*out_handle));
   out_handle->handle_type = type;
-  out_handle->flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
+  out_handle->owned = 0;
   out_handle->value.ptr = frame->sync_handle;
   if (out_value)
     *out_value = frame->meta.sync_value;
@@ -327,7 +327,7 @@ uint64_t texlink_frame_sync_value(texlink_frame_t *frame) {
 int texlink_native_handle_close(texlink_native_handle_t *handle) {
   if (!handle)
     return -EINVAL;
-  if (!(handle->flags & TEXLINK_NATIVE_HANDLE_FLAG_OWNED))
+  if (!handle->owned)
     return -EPERM;
   if (!is_win32_handle_type(handle->handle_type) || !handle->value.ptr)
     return -EINVAL;
