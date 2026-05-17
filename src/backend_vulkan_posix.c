@@ -188,19 +188,8 @@ texlink_frame_t *
 texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
   if (!desc || desc->width == 0 || desc->height == 0)
     return NULL;
-  if (desc->size > UINT32_MAX)
-    return NULL;
-
-  int fd = desc->dma_buf_fd;
-  uint32_t flags = desc->flags;
   texlink_native_handle_t handle = desc->handle;
-  if (handle.type != TEXLINK_NATIVE_HANDLE_UNKNOWN) {
-    if (handle.type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD)
-      return NULL;
-    fd = handle.value.fd;
-    flags = handle.flags;
-  }
-  if (fd < 0) {
+  if (handle.type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
     if (!desc->device || !desc->memory)
       return NULL;
 
@@ -215,16 +204,20 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
         .memory = desc->memory,
         .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
     };
+    int fd = -1;
     if (get_memory_fd(desc->device, &fd_info, &fd) != VK_SUCCESS || fd < 0)
       return NULL;
-    flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED;
+    handle = (texlink_native_handle_t){
+        .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+        .flags = TEXLINK_NATIVE_HANDLE_FLAG_OWNED,
+        .value.fd = fd,
+    };
+  } else if (handle.type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) {
+    return NULL;
   }
 
-  handle = (texlink_native_handle_t){
-      .type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
-      .flags = flags ? flags : TEXLINK_NATIVE_HANDLE_FLAG_BORROWED,
-      .value.fd = fd,
-  };
+  if (!handle.flags)
+    handle.flags = TEXLINK_NATIVE_HANDLE_FLAG_BORROWED;
   return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
       .type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
       .width = desc->width,

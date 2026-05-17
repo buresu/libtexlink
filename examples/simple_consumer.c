@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
   printf("Connected.\n");
 
   texlink_meta_t meta = texlink_client_meta(client);
-  printf("Frame: %u bytes  format=0x%x\n", meta.size, meta.format);
+  printf("Frame: %llu bytes  format=0x%x\n", (unsigned long long)meta.size, meta.format);
 
   uint32_t frame_count = texlink_client_frame_count(client);
   texlink_mapping_t mappings[3] = {0};

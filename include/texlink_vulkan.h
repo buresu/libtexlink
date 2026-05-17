@@ -33,7 +33,6 @@ typedef struct {
   VkDevice device;
   VkImage image;
   VkDeviceMemory memory;
-  int dma_buf_fd;
   texlink_native_handle_t handle;
   uint32_t width;
   uint32_t height;

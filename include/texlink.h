@@ -59,7 +59,7 @@ typedef struct {
   uint32_t stride;
   uint32_t format;
   uint64_t modifier;
-  uint32_t size;
+  uint64_t size;
   uint64_t frame_id;
   uint32_t sync_handle_type;
   uint32_t _pad0;

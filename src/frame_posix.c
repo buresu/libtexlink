@@ -115,7 +115,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
     frame->meta.depth = 1;
     frame->meta.format = format;
     frame->meta.stride = stride ? stride : infer_stride(w, format);
-    frame->meta.size = (uint32_t)sz;
+    frame->meta.size = sz;
     return frame;
   }
 
@@ -137,7 +137,7 @@ static texlink_frame_t *alloc_linear(size_t sz, uint32_t w, uint32_t h,
   frame->meta.height = h;
   frame->meta.format = format;
   frame->meta.stride = stride ? stride : infer_stride(w, format);
-  frame->meta.size = (uint32_t)sz; /* logical size; frame->size is physical */
+  frame->meta.size = sz; /* logical size; frame->size is physical */
   return frame;
 }
 
@@ -201,7 +201,7 @@ static texlink_frame_t *alloc_gbm(uint32_t w, uint32_t h, uint32_t format,
   frame->meta.stride = stride;
   frame->meta.format = format;
   frame->meta.modifier = gbm_bo_get_modifier(frame->bo);
-  frame->meta.size = (uint32_t)frame->size;
+  frame->meta.size = frame->size;
   return frame;
 }
 
@@ -285,7 +285,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
   frame->meta.format = desc->format;
   frame->meta.stride = desc->stride;
   frame->meta.modifier = desc->modifier;
-  frame->meta.size = (uint32_t)size;
+  frame->meta.size = size;
   return frame;
 }
 

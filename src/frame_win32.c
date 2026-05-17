@@ -90,7 +90,7 @@ static texlink_frame_t *alloc_mapping(size_t size, uint32_t w, uint32_t h,
   frame->meta.depth = 1;
   frame->meta.format = format;
   frame->meta.stride = stride ? stride : infer_stride(w, format);
-  frame->meta.size = (uint32_t)size;
+  frame->meta.size = size;
   return frame;
 }
 
@@ -165,7 +165,7 @@ texlink_frame_t *texlink_frame_create_from_native_handle(
   frame->meta.format = desc->format;
   frame->meta.stride = desc->stride;
   frame->meta.modifier = desc->modifier;
-  frame->meta.size = (uint32_t)size;
+  frame->meta.size = size;
   return frame;
 }
 
