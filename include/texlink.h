@@ -171,8 +171,8 @@ void texlink_client_destroy(texlink_client_t *client);
 texlink_frame_t *texlink_client_acquire_frame(texlink_client_t *client);
 void texlink_client_release_frame(texlink_client_t *client,
                                   texlink_frame_t *frame);
-uint32_t texlink_client_frame_count(texlink_client_t *client);
-texlink_frame_t *texlink_client_frame(texlink_client_t *client, uint32_t idx);
+int texlink_client_frame_count(texlink_client_t *client);
+texlink_frame_t *texlink_client_frame(texlink_client_t *client, int idx);
 texlink_meta_t texlink_client_meta(texlink_client_t *client);
 
 /* Frame API */

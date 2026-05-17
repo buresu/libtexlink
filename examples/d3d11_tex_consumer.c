@@ -297,7 +297,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  uint32_t frame_count = texlink_client_frame_count(client);
+  int frame_count = texlink_client_frame_count(client);
   if (frame_count > MAX_FRAMES)
     frame_count = MAX_FRAMES;
   texlink_meta_t meta = texlink_client_meta(client);

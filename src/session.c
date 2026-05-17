@@ -576,13 +576,13 @@ void texlink_client_release_frame(texlink_client_t *client,
   session_consumer_release(client->session, frame);
 }
 
-uint32_t texlink_client_frame_count(texlink_client_t *client) {
+int texlink_client_frame_count(texlink_client_t *client) {
   if (!client || !client->session)
     return 0;
-  return (uint32_t)client->session->buf_count;
+  return client->session->buf_count;
 }
 
-texlink_frame_t *texlink_client_frame(texlink_client_t *client, uint32_t idx) {
+texlink_frame_t *texlink_client_frame(texlink_client_t *client, int idx) {
   if (!client || !client->session)
     return NULL;
   return session_frame(client->session, (int)idx);

@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   texlink_meta_t meta = texlink_client_meta(client);
   printf("Frame: %llu bytes  format=0x%x\n", (unsigned long long)meta.size, meta.format);
 
-  uint32_t frame_count = texlink_client_frame_count(client);
+  int frame_count = texlink_client_frame_count(client);
   texlink_mapping_t mappings[3] = {0};
   texlink_map_desc_t map_desc = {
       .flags = TEXLINK_MAP_READ,

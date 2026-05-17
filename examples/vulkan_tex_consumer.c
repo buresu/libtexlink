@@ -434,7 +434,7 @@ int main(void) {
                     (void **)&sync_device);
 #endif
 
-  uint32_t frame_count = texlink_client_frame_count(client);
+  int frame_count = texlink_client_frame_count(client);
   if (frame_count > MAX_IMAGES)
     frame_count = MAX_IMAGES;
   for (uint32_t i = 0; i < frame_count; i++) {

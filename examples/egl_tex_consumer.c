@@ -65,7 +65,7 @@ int main(void) {
 
   texlink_egl_image_t *images[2] = {0};
   GLuint textures[2];
-  uint32_t frame_count = texlink_client_frame_count(client);
+  int frame_count = texlink_client_frame_count(client);
   if (frame_count > 2)
     frame_count = 2;
   for (uint32_t i = 0; i < frame_count; i++) {
