@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-option(TEXLINK_BUILD_SHARED_LIBS "Build texlink as a shared library" OFF)
+option(TEXLINK_BUILD_SHARED "Build texlink as a shared library" ON)
 option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_WGL "Build the WGL/OpenGL texlink backend utility" OFF)
@@ -20,7 +20,7 @@ set(TEXLINK_CORE_PRIVATE_LIBS)
 set(TEXLINK_CORE_PUBLIC_LIBS)
 set(TEXLINK_CORE_PRIVATE_COMPILE_OPTIONS)
 
-if(TEXLINK_BUILD_SHARED_LIBS)
+if(TEXLINK_BUILD_SHARED)
   set(TEXLINK_LIBRARY_TYPE SHARED)
 else()
   set(TEXLINK_LIBRARY_TYPE STATIC)
@@ -41,7 +41,7 @@ endif()
 
 add_library(texlink ${TEXLINK_LIBRARY_TYPE} ${TEXLINK_CORE_SOURCES})
 
-if(TEXLINK_BUILD_SHARED_LIBS)
+if(TEXLINK_BUILD_SHARED)
     set_target_properties(texlink PROPERTIES
         VERSION   ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
