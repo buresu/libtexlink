@@ -67,8 +67,12 @@ static const char *kernel_src =
     "}\n";
 
 static void sleep_until_next_frame(double *last_time, double interval_sec) {
+  double target = *last_time + interval_sec;
   double now = glfwGetTime();
-  double wait = *last_time + interval_sec - now;
+  if (target < now - interval_sec)
+    target = now + interval_sec;
+
+  double wait = target - now;
   if (wait > 0.0) {
     struct timespec ts = {
         .tv_sec = (time_t)wait,
@@ -76,7 +80,7 @@ static void sleep_until_next_frame(double *last_time, double interval_sec) {
     };
     nanosleep(&ts, NULL);
   }
-  *last_time = glfwGetTime();
+  *last_time = target;
 }
 
 static const char *cu_result_name(CUresult result) {

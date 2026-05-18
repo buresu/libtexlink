@@ -16,8 +16,12 @@
 #define HEIGHT 512
 
 static void sleep_until_next_frame(double *last_time, double interval_sec) {
+  double target = *last_time + interval_sec;
   double now = glfwGetTime();
-  double wait = *last_time + interval_sec - now;
+  if (target < now - interval_sec)
+    target = now + interval_sec;
+
+  double wait = target - now;
   if (wait > 0.0) {
     struct timespec ts = {
         .tv_sec = (time_t)wait,
@@ -25,7 +29,7 @@ static void sleep_until_next_frame(double *last_time, double interval_sec) {
     };
     nanosleep(&ts, NULL);
   }
-  *last_time = glfwGetTime();
+  *last_time = target;
 }
 
 static const char *vert_src =
@@ -63,6 +67,7 @@ int main(int argc, char **argv) {
   GLFWwindow *win =
       glfwCreateWindow(WIDTH, HEIGHT, "egl tex producer", NULL, NULL);
   glfwMakeContextCurrent(win);
+  glfwSwapInterval(0);
   glewInit();
 
   EGLDisplay dpy = eglGetCurrentDisplay();

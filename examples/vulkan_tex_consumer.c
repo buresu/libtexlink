@@ -277,16 +277,21 @@ static void create_swapchain(VulkanContext *ctx) {
  * texlink_client_acquire_frame has already confirmed the producer wrote new
  * data).
  */
-static void display_frame(VulkanContext *ctx, ImportedImage *img,
-                          const texlink_meta_t *meta) {
+static int display_frame(VulkanContext *ctx, ImportedImage *img,
+                         const texlink_meta_t *meta) {
   VkImage image = texlink_vk_image_handle(img->image);
   uint32_t sc_idx = 0;
-  VkResult res =
-      vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
-                            ctx->image_available, VK_NULL_HANDLE, &sc_idx);
+  VkResult res = vkAcquireNextImageKHR(ctx->device, ctx->swapchain,
+                                       16000000ull, ctx->image_available,
+                                       VK_NULL_HANDLE, &sc_idx);
+  if (res == VK_TIMEOUT || res == VK_NOT_READY)
+    return 0;
   if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR)
-    return;
-  vk_check(res, "vkAcquireNextImageKHR");
+    return 0;
+  if (res != VK_SUCCESS) {
+    fprintf(stderr, "vkAcquireNextImageKHR skipped (%d)\n", res);
+    return 0;
+  }
 
   VkCommandBufferBeginInfo bi = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -386,7 +391,11 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .signalSemaphoreCount = 1,
       .pSignalSemaphores = &ctx->render_finished,
   };
-  vkQueueSubmit(ctx->graphics_queue, 1, &submit, ctx->fence);
+  res = vkQueueSubmit(ctx->graphics_queue, 1, &submit, ctx->fence);
+  if (res != VK_SUCCESS) {
+    fprintf(stderr, "vkQueueSubmit failed (%d)\n", res);
+    return -1;
+  }
   vkWaitForFences(ctx->device, 1, &ctx->fence, VK_TRUE, UINT64_MAX);
   vkResetFences(ctx->device, 1, &ctx->fence);
   vkResetCommandBuffer(ctx->cmd, 0);
@@ -401,7 +410,15 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
       .pSwapchains = &ctx->swapchain,
       .pImageIndices = &sc_idx,
   };
-  vkQueuePresentKHR(ctx->graphics_queue, &present);
+  res = vkQueuePresentKHR(ctx->graphics_queue, &present);
+  if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR ||
+      res == VK_ERROR_SURFACE_LOST_KHR)
+    return 0;
+  if (res != VK_SUCCESS) {
+    fprintf(stderr, "vkQueuePresentKHR skipped (%d)\n", res);
+    return 0;
+  }
+  return 1;
 }
 
 int main(int argc, char **argv) {
@@ -489,8 +506,8 @@ int main(int argc, char **argv) {
   while (!glfwWindowShouldClose(window)) {
     texlink_frame_t *frame = texlink_client_acquire_frame(client);
     if (!frame) {
-      fprintf(stderr, "Acquire failed\n");
-      break;
+      glfwWaitEventsTimeout(0.001);
+      continue;
     }
     int idx = texlink_frame_index(frame);
     if (idx < 0 || idx >= frame_count) {
@@ -506,7 +523,10 @@ int main(int argc, char **argv) {
       break;
     }
 #endif
-    display_frame(&vk, &images[idx], &meta);
+    if (display_frame(&vk, &images[idx], &meta) < 0) {
+      texlink_client_release_frame(client, frame);
+      break;
+    }
 
     texlink_client_release_frame(client, frame);
     glfwPollEvents();

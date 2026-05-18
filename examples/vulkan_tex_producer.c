@@ -31,8 +31,12 @@
 #define MAX_SC_IMGS 8
 
 static void sleep_until_next_frame(double *last_time, double interval_sec) {
+  double target = *last_time + interval_sec;
   double now = glfwGetTime();
-  double wait = *last_time + interval_sec - now;
+  if (target < now - interval_sec)
+    target = now + interval_sec;
+
+  double wait = target - now;
   if (wait > 0.0) {
 #ifdef _WIN32
     Sleep((DWORD)(wait * 1000.0));
@@ -44,7 +48,7 @@ static void sleep_until_next_frame(double *last_time, double interval_sec) {
     nanosleep(&ts, NULL);
 #endif
   }
-  *last_time = glfwGetTime();
+  *last_time = target;
 }
 
 typedef struct {
