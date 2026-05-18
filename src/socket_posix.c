@@ -172,8 +172,8 @@ int texlink_recv_frame(texlink_socket_t sock, texlink_frame_msg_t *msg,
   if (texlink_socket_recv(sock, msg, sizeof(*msg)) != 0)
     return -1;
 
-  if (msg->has_sync_fd)
-    texlink_recv_ipc_handles(sock, sync_fd, 1);
+  if (msg->has_sync_fd && texlink_recv_ipc_handles(sock, sync_fd, 1) != 0)
+    return -1;
 
   return 0;
 }

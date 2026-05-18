@@ -213,6 +213,25 @@ static void create_swapchain(VulkanContext *ctx) {
                        : (VkExtent2D){WIDTH, HEIGHT};
   free(formats);
 
+  VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+  uint32_t present_mode_count = 0;
+  vkGetPhysicalDeviceSurfacePresentModesKHR(ctx->phys, ctx->surface,
+                                            &present_mode_count, NULL);
+  if (present_mode_count > 0) {
+    VkPresentModeKHR *present_modes =
+        malloc(present_mode_count * sizeof(*present_modes));
+    vkGetPhysicalDeviceSurfacePresentModesKHR(ctx->phys, ctx->surface,
+                                              &present_mode_count,
+                                              present_modes);
+    for (uint32_t i = 0; i < present_mode_count; i++) {
+      if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
+        present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+        break;
+      }
+    }
+    free(present_modes);
+  }
+
   uint32_t image_count = caps.minImageCount + 1;
   if (caps.maxImageCount > 0 && image_count > caps.maxImageCount)
     image_count = caps.maxImageCount;
@@ -235,7 +254,7 @@ static void create_swapchain(VulkanContext *ctx) {
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .preTransform = caps.currentTransform,
       .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+      .presentMode = present_mode,
       .clipped = VK_TRUE,
   };
   vk_check(

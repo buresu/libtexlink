@@ -42,7 +42,7 @@ struct gbm_bo;
 #else
 #define TEXLINK_SHM_PREFIX "/texlink_"
 #endif
-#define TEXLINK_PROTO_VER 2
+#define TEXLINK_PROTO_VER 3
 #define TEXLINK_NAME_MAX 64
 #define TEXLINK_MAX_CLIENTS 16
 #define TEXLINK_MAX_SESSIONS 64
@@ -87,9 +87,9 @@ struct texlink_frame {
 typedef struct {
   _Atomic uint64_t frame_id;
   _Atomic uint32_t current_idx;
+  _Atomic uint32_t frame_refs[TEXLINK_MAX_BUFS];
   uint32_t buf_count;
   texlink_meta_t meta;
-  uint8_t _pad[40]; /* pad to 128 bytes */
 } texlink_shm_t;
 
 /* Handshake sent over socket at connect time */
@@ -109,6 +109,11 @@ typedef struct {
   uint32_t has_sync_fd; /* 1 if SCM_RIGHTS carries sync_fd */
   uint64_t sync_value;
 } texlink_frame_msg_t;
+
+/* Per-frame release sent by consumer to producer */
+typedef struct {
+  uint32_t buf_idx;
+} texlink_release_msg_t;
 
 /* Registry entry stored in TEXLINK_REGISTRY_PATH */
 typedef struct {
@@ -134,6 +139,7 @@ struct texlink_session {
   int is_producer;
   int write_idx; /* producer rotation cursor */
   int is_registered;
+  uint32_t acquired_refs[TEXLINK_MAX_BUFS];
   uint64_t last_frame_id; /* updated by consumer_acquire from socket msg */
   char shm_name[64];
   char sock_path[TEXLINK_SOCKET_PATH_MAX];
@@ -152,6 +158,7 @@ struct texlink_server {
   int last_error;
   int write_idx;
   int is_registered;
+  uint32_t client_refs[TEXLINK_MAX_CLIENTS][TEXLINK_MAX_BUFS];
   char shm_name[64];
   char name[TEXLINK_NAME_MAX];
   char path[TEXLINK_SOCKET_PATH_MAX];

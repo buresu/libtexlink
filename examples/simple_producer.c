@@ -93,8 +93,10 @@ int main(int argc, char **argv) {
     texlink_server_poll(server);
 
     texlink_frame_t *frame = texlink_server_begin_frame(server);
-    if (!frame)
-      break;
+    if (!frame) {
+      sleep_ms(1);
+      continue;
+    }
 
     texlink_map_desc_t access_desc = {
         .flags = TEXLINK_MAP_WRITE,

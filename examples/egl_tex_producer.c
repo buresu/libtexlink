@@ -162,8 +162,11 @@ int main(int argc, char **argv) {
     texlink_server_poll(server);
 
     texlink_frame_t *frame = texlink_server_begin_frame(server);
-    if (!frame)
-      break;
+    if (!frame) {
+      sleep_until_next_frame(&last_frame, 1.0 / 60.0);
+      glfwPollEvents();
+      continue;
+    }
     int idx = texlink_frame_index(frame);
 
     float angle = (float)glfwGetTime();

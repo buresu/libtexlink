@@ -152,9 +152,14 @@ int main(int argc, char **argv) {
     glBindVertexArray(0);
     glUseProgram(0);
 
+    GLsync read_done = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glfwSwapBuffers(win);
+    if (read_done) {
+      glClientWaitSync(read_done, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
+      glDeleteSync(read_done);
+    }
     texlink_client_release_frame(client, frame);
 
-    glfwSwapBuffers(win);
     glfwPollEvents();
   }
 
