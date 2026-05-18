@@ -12,7 +12,16 @@ struct texlink_vk_image {
   int owns_frame;
 };
 
+struct texlink_vk_buffer {
+  VkDevice device;
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  texlink_frame_t *frame;
+  int owns_frame;
+};
+
 uint32_t find_memory_type(
     const VkPhysicalDeviceMemoryProperties *memory_properties,
     uint32_t type_bits, VkMemoryPropertyFlags flags);
 void destroy_vk_image(texlink_vk_image_t *image);
+void destroy_vk_buffer(texlink_vk_buffer_t *buffer);

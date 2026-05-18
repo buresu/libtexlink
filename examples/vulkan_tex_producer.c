@@ -527,7 +527,7 @@ static void preview_frame(VulkanContext *ctx, VkImage src_image) {
   vkQueuePresentKHR(ctx->graphics_queue, &present);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
     return 1;
@@ -585,7 +585,7 @@ int main(void) {
     return 1;
   }
 
-  const char *name = "d3d_interop";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
   printf("Serving '%s'...\n", name);
   texlink_server_desc_t desc = {
       .name = name,

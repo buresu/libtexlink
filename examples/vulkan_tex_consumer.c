@@ -385,7 +385,7 @@ static void display_frame(VulkanContext *ctx, ImportedImage *img,
   vkQueuePresentKHR(ctx->graphics_queue, &present);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
     return 1;
@@ -409,7 +409,7 @@ int main(void) {
   create_device(&vk);
   create_swapchain(&vk);
 
-  const char *name = "d3d_interop";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
   printf("Connecting to '%s'...\n", name);
   texlink_client_desc_t desc = {
       .name = name,

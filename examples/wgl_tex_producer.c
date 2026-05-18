@@ -148,7 +148,7 @@ static int copy_window_to_shared_texture(texlink_wgl_texture_frame_t *frame) {
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");

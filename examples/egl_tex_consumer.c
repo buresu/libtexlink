@@ -34,7 +34,9 @@ static float quad[] = {
     -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f,
 };
 
-int main(void) {
+int main(int argc, char **argv) {
+  const char *name = (argc > 1) ? argv[1] : "texlink";
+
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -47,9 +49,9 @@ int main(void) {
   glfwSwapInterval(1);
   glewInit();
 
-  printf("Connecting to 'texshare'...\n");
+  printf("Connecting to '%s'...\n", name);
   texlink_client_desc_t desc = {
-      .name = "texshare",
+      .name = name,
       .backend_type = TEXLINK_BACKEND_EGL,
       .timeout_ms = 5000,
   };

@@ -3,7 +3,7 @@
  * simple producer example
  *
  * Usage: producer [session_name]
- *        Default name: "example"
+ *        Default name: "texlink"
  *        Socket:       /tmp/texlink/<name>.sock
  */
 #include <texlink.h>
@@ -36,7 +36,7 @@ static void sleep_ms(int ms) {
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
 
-  const char *name = (argc > 1) ? argv[1] : "example";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
 
   /* Double-buffering: two raw frames */
   texlink_frame_t *frames[2] = {

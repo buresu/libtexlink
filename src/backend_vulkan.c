@@ -39,6 +39,17 @@ void destroy_vk_image(texlink_vk_image_t *image) {
   image->memory = VK_NULL_HANDLE;
 }
 
+void destroy_vk_buffer(texlink_vk_buffer_t *buffer) {
+  if (!buffer || !buffer->device)
+    return;
+  if (buffer->buffer)
+    vkDestroyBuffer(buffer->device, buffer->buffer, NULL);
+  if (buffer->memory)
+    vkFreeMemory(buffer->device, buffer->memory, NULL);
+  buffer->buffer = VK_NULL_HANDLE;
+  buffer->memory = VK_NULL_HANDLE;
+}
+
 VkImage texlink_vk_image_handle(texlink_vk_image_t *image) {
   return image ? image->image : VK_NULL_HANDLE;
 }
@@ -58,4 +69,25 @@ void texlink_vk_image_destroy(texlink_vk_image_t *image) {
 
 texlink_frame_t *texlink_vk_image_frame_frame(texlink_vk_image_t *image) {
   return image ? image->frame : NULL;
+}
+
+VkBuffer texlink_vk_buffer_handle(texlink_vk_buffer_t *buffer) {
+  return buffer ? buffer->buffer : VK_NULL_HANDLE;
+}
+
+VkDeviceMemory texlink_vk_buffer_memory(texlink_vk_buffer_t *buffer) {
+  return buffer ? buffer->memory : VK_NULL_HANDLE;
+}
+
+texlink_frame_t *texlink_vk_buffer_frame_frame(texlink_vk_buffer_t *buffer) {
+  return buffer ? buffer->frame : NULL;
+}
+
+void texlink_vk_buffer_destroy(texlink_vk_buffer_t *buffer) {
+  if (!buffer)
+    return;
+  destroy_vk_buffer(buffer);
+  if (buffer->owns_frame)
+    texlink_frame_destroy(buffer->frame);
+  free(buffer);
 }

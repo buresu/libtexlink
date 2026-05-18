@@ -1,5 +1,6 @@
 #include "backend_vulkan_internal.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,6 +16,23 @@ vk_external_memory_handle_type(texlink_native_handle_type_t type) {
   default:
     return 0;
   }
+}
+
+static int export_memory_dma_buf_fd(VkDevice device, VkDeviceMemory memory) {
+  PFN_vkGetMemoryFdKHR get_memory_fd =
+      (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(device, "vkGetMemoryFdKHR");
+  if (!get_memory_fd)
+    return -1;
+
+  VkMemoryGetFdInfoKHR fd_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+      .memory = memory,
+      .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+  };
+  int fd = -1;
+  if (get_memory_fd(device, &fd_info, &fd) != VK_SUCCESS)
+    return -1;
+  return fd;
 }
 
 static texlink_vk_image_t *import_frame_with_handle_type(
@@ -164,24 +182,116 @@ texlink_vk_image_frame_create(const texlink_vk_image_frame_desc_t *desc) {
     return NULL;
 
   uint32_t format = desc->format ? desc->format : TEXLINK_FRAME_FORMAT_ARGB8888;
-  texlink_frame_t *frame = texlink_frame_create(&(texlink_frame_desc_t){
-      .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
-      .width = desc->width,
-      .height = desc->height,
-      .format = format,
-  });
-  if (!frame)
+  VkFormat vk_format = texlink_vk_format(format);
+  if (vk_format == VK_FORMAT_UNDEFINED)
     return NULL;
 
-  texlink_vk_image_t *image = import_frame(
-      desc->device, &desc->memory_properties, frame, texlink_vk_format(format),
-      desc->usage, desc->initial_layout);
-  if (!image) {
-    texlink_frame_destroy(frame);
+  texlink_vk_image_t *image = calloc(1, sizeof(*image));
+  if (!image)
     return NULL;
+  image->device = desc->device;
+
+  VkExternalMemoryImageCreateInfo external = {
+      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+  };
+  VkImageCreateInfo image_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = &external,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = vk_format,
+      .extent = {desc->width, desc->height, 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_LINEAR,
+      .usage = desc->usage ? desc->usage
+                           : (VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                              VK_IMAGE_USAGE_TRANSFER_DST_BIT),
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = desc->initial_layout,
+  };
+  if (vkCreateImage(desc->device, &image_info, NULL, &image->image) !=
+      VK_SUCCESS)
+    goto err;
+
+  VkMemoryRequirements req;
+  vkGetImageMemoryRequirements(desc->device, image->image, &req);
+
+  VkExportMemoryAllocateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+  };
+  VkMemoryDedicatedAllocateInfo dedicated = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+      .pNext = &export_info,
+      .image = image->image,
+  };
+  VkMemoryPropertyFlags flags = desc->memory_flags;
+  VkMemoryAllocateInfo alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &dedicated,
+      .allocationSize = req.size,
+      .memoryTypeIndex =
+          find_memory_type(&desc->memory_properties, req.memoryTypeBits, flags),
+  };
+  if (alloc_info.memoryTypeIndex == UINT32_MAX)
+    goto err;
+  if (vkAllocateMemory(desc->device, &alloc_info, NULL, &image->memory) !=
+      VK_SUCCESS)
+    goto err;
+  if (vkBindImageMemory(desc->device, image->image, image->memory, 0) !=
+      VK_SUCCESS)
+    goto err;
+
+  VkImageSubresource subresource = {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .mipLevel = 0,
+      .arrayLayer = 0,
+  };
+  VkSubresourceLayout layout = {0};
+  vkGetImageSubresourceLayout(desc->device, image->image, &subresource,
+                              &layout);
+
+  int fd = export_memory_dma_buf_fd(desc->device, image->memory);
+  if (fd < 0)
+    goto err;
+
+  uint32_t stride = layout.rowPitch ? (uint32_t)layout.rowPitch
+                                    : desc->width *
+                                          (format == TEXLINK_FRAME_FORMAT_R8
+                                               ? 1u
+                                               : 4u);
+  image->frame = texlink_frame_create_from_native_handle(
+      &(texlink_frame_native_desc_t){
+          .backend_type = TEXLINK_BACKEND_VULKAN,
+          .frame_type = TEXLINK_FRAME_TYPE_TEXTURE_2D,
+          .handle = {.handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+                     .owned = 1,
+                     .value.fd = fd},
+          .width = desc->width,
+          .height = desc->height,
+          .depth = 1,
+          .format = format,
+          .stride = stride,
+          .size = layout.size ? layout.size : req.size,
+      });
+  if (!image->frame) {
+    texlink_native_handle_t handle = {
+        .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+        .owned = 1,
+        .value.fd = fd,
+    };
+    texlink_native_handle_close(&handle);
+    goto err;
   }
   image->owns_frame = 1;
   return image;
+
+err:
+  destroy_vk_image(image);
+  free(image);
+  return NULL;
 }
 
 texlink_frame_t *
@@ -227,5 +337,127 @@ texlink_vk_frame_wrap_image(const texlink_vk_wrap_image_desc_t *desc) {
       .size = desc->size,
       .backend_type = TEXLINK_BACKEND_VULKAN,
       .handle = handle,
+  });
+}
+
+texlink_vk_buffer_t *
+texlink_vk_buffer_frame_create(const texlink_vk_buffer_frame_desc_t *desc) {
+  if (!desc || !desc->device || desc->size == 0)
+    return NULL;
+
+  texlink_vk_buffer_t *buffer = calloc(1, sizeof(*buffer));
+  if (!buffer)
+    return NULL;
+  buffer->device = desc->device;
+
+  VkExternalMemoryBufferCreateInfo external = {
+      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+  };
+  VkBufferCreateInfo buffer_info = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .pNext = &external,
+      .size = desc->size,
+      .usage = desc->usage ? desc->usage
+                           : (VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                              VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                              VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  if (vkCreateBuffer(desc->device, &buffer_info, NULL, &buffer->buffer) !=
+      VK_SUCCESS)
+    goto err;
+
+  VkMemoryRequirements req;
+  vkGetBufferMemoryRequirements(desc->device, buffer->buffer, &req);
+
+  VkExportMemoryAllocateInfo export_info = {
+      .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+  };
+  VkMemoryDedicatedAllocateInfo dedicated = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
+      .pNext = &export_info,
+      .buffer = buffer->buffer,
+  };
+  VkMemoryAllocateInfo alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &dedicated,
+      .allocationSize = req.size,
+      .memoryTypeIndex = find_memory_type(&desc->memory_properties,
+                                          req.memoryTypeBits,
+                                          desc->memory_flags),
+  };
+  if (alloc_info.memoryTypeIndex == UINT32_MAX)
+    goto err;
+  if (vkAllocateMemory(desc->device, &alloc_info, NULL, &buffer->memory) !=
+      VK_SUCCESS)
+    goto err;
+  if (vkBindBufferMemory(desc->device, buffer->buffer, buffer->memory, 0) !=
+      VK_SUCCESS)
+    goto err;
+
+  int fd = export_memory_dma_buf_fd(desc->device, buffer->memory);
+  if (fd < 0)
+    goto err;
+  buffer->frame = texlink_frame_create_from_native_handle(
+      &(texlink_frame_native_desc_t){
+          .backend_type = TEXLINK_BACKEND_VULKAN,
+          .frame_type = TEXLINK_FRAME_TYPE_COMPUTE_BUFFER,
+          .handle = {.handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+                     .owned = 1,
+                     .value.fd = fd},
+          .width = (desc->size <= UINT32_MAX) ? (uint32_t)desc->size : 0,
+          .height = 1,
+          .depth = 1,
+          .size = req.size,
+      });
+  if (!buffer->frame) {
+    texlink_native_handle_t handle = {
+        .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+        .owned = 1,
+        .value.fd = fd,
+    };
+    texlink_native_handle_close(&handle);
+    goto err;
+  }
+  buffer->owns_frame = 1;
+  return buffer;
+
+err:
+  destroy_vk_buffer(buffer);
+  free(buffer);
+  return NULL;
+}
+
+texlink_frame_t *
+texlink_vk_frame_wrap_buffer(const texlink_vk_wrap_buffer_desc_t *desc) {
+  if (!desc || desc->size == 0)
+    return NULL;
+
+  texlink_native_handle_t handle = desc->handle;
+  if (handle.handle_type == TEXLINK_NATIVE_HANDLE_UNKNOWN) {
+    if (!desc->device || !desc->memory)
+      return NULL;
+    int fd = export_memory_dma_buf_fd(desc->device, desc->memory);
+    if (fd < 0)
+      return NULL;
+    handle = (texlink_native_handle_t){
+        .handle_type = TEXLINK_NATIVE_HANDLE_DMA_BUF_FD,
+        .owned = 1,
+        .value.fd = fd,
+    };
+  } else if (handle.handle_type != TEXLINK_NATIVE_HANDLE_DMA_BUF_FD) {
+    return NULL;
+  }
+
+  return texlink_frame_create_from_native_handle(&(texlink_frame_native_desc_t){
+      .backend_type = TEXLINK_BACKEND_VULKAN,
+      .frame_type = TEXLINK_FRAME_TYPE_COMPUTE_BUFFER,
+      .handle = handle,
+      .width = (desc->size <= UINT32_MAX) ? (uint32_t)desc->size : 0,
+      .height = 1,
+      .depth = 1,
+      .size = desc->size,
   });
 }

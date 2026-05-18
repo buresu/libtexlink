@@ -14,6 +14,7 @@ The library abstracts platform-specific external memory handles behind a unified
 | EGL / OpenGL | ✓ | |
 | WGL / OpenGL | | ✓ |
 | Vulkan | ✓ | ✓ |
+| CUDA import | ✓ | |
 | Direct3D 11 | | ✓ |
 | Direct3D 12 | | ✓ |
 
@@ -63,9 +64,63 @@ Enable the backends you need:
 # Linux — EGL + Vulkan
 cmake -B build -DTEXLINK_WITH_EGL=ON -DTEXLINK_WITH_VULKAN=ON
 
+# Linux — Vulkan dma-buf export + CUDA import
+cmake -B build -DTEXLINK_WITH_VULKAN=ON -DTEXLINK_WITH_CUDA=ON
+
 # Windows — D3D12 + Vulkan
 cmake -B build -DTEXLINK_WITH_D3D12=ON -DTEXLINK_WITH_VULKAN=ON
 ```
+
+## Linux Vulkan + CUDA dma-buf
+
+On Linux, Vulkan is the central GPU sharing backend. `texlink_vulkan`
+can create exportable `VkImage` and `VkBuffer` allocations, wrap existing
+Vulkan allocations, and expose the shared memory through the common
+`texlink_frame_t` metadata and DMA-BUF fd handle.
+
+CUDA is an import backend. It does not export DMA-BUF memory from CUDA
+allocations. `texlink_cuda` imports a `texlink_frame_t` carrying a
+`TEXLINK_NATIVE_HANDLE_DMA_BUF_FD` and maps buffer resources to a CUDA
+device pointer with the CUDA driver virtual memory APIs. Prefer
+`texlink_vk_buffer_frame_create` for CUDA kernel read/write interop.
+Vulkan images are exportable for Vulkan/EGL/DRM consumers; CUDA image
+array mapping depends on CUDA driver support and is intentionally not
+promised by the current C API.
+
+For texture consumers, build both EGL and CUDA support and run the CUDA
+texture sample against an existing texture producer:
+
+```sh
+cmake -B build -DTEXLINK_WITH_EGL=ON -DTEXLINK_WITH_VULKAN=ON -DTEXLINK_WITH_CUDA=ON
+cmake --build build
+
+# Terminal 1
+./build/vulkan_tex_producer
+
+# Terminal 2
+./build/cuda_tex_consumer texlink
+```
+
+`cuda_tex_consumer` imports the producer's DMA-BUF texture as an EGLImage
+and registers it with CUDA using CUDA EGL interop, so it can receive the
+textures produced by the existing Vulkan/EGL texture examples.
+
+For CUDA-written texture output, run the CUDA producer and any existing
+texture consumer:
+
+```sh
+# Terminal 1
+./build/cuda_tex_producer
+
+# Terminal 2
+./build/vulkan_tex_consumer
+# or
+./build/egl_tex_consumer
+```
+
+`cuda_tex_producer` still follows the Linux sharing model: EGL creates the
+exportable DMA-BUF texture, CUDA imports that EGLImage and writes pixels,
+then texlink publishes the frame for Vulkan/EGL consumers.
 
 ### Install
 ```sh

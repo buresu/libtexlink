@@ -52,7 +52,9 @@ static float verts[] = {
     0.5f,  -0.288675f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f,
 };
 
-int main(void) {
+int main(int argc, char **argv) {
+  const char *name = (argc > 1) ? argv[1] : "texlink";
+
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -87,9 +89,9 @@ int main(void) {
     return 1;
   }
 
-  printf("Serving 'texshare'...\n");
+  printf("Serving '%s'...\n", name);
   texlink_server_desc_t desc = {
-      .name = "texshare",
+      .name = name,
       .backend_type = TEXLINK_BACKEND_EGL,
       .frames = frames,
       .frame_count = 2,

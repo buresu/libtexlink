@@ -2,7 +2,7 @@
  * simple consumer example
  *
  * Usage: consumer [session_name]
- *        Default name: "example"
+ *        Default name: "texlink"
  *        Use --list to list available sessions.
  */
 #include <texlink.h>
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  const char *name = (argc > 1) ? argv[1] : "example";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
   printf("Connecting to \"%s\" ...\n", name);
 
   texlink_client_desc_t desc = {

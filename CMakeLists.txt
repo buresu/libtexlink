@@ -11,6 +11,7 @@ option(TEXLINK_BUILD_EXAMPLES "Build example programs" ON)
 option(TEXLINK_WITH_EGL "Build the EGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_WGL "Build the WGL/OpenGL texlink backend utility" OFF)
 option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" OFF)
+option(TEXLINK_WITH_CUDA "Build the CUDA dma-buf import backend utility" OFF)
 option(TEXLINK_WITH_D3D11 "Build the Direct3D 11 texlink backend utility" OFF)
 option(TEXLINK_WITH_D3D12 "Build the Direct3D 12 texlink backend utility" OFF)
 
@@ -131,6 +132,10 @@ if(TEXLINK_WITH_VULKAN)
   find_package(Vulkan)
 endif()
 
+if(NOT WIN32 AND TEXLINK_WITH_CUDA)
+  find_package(CUDAToolkit)
+endif()
+
 if(TEXLINK_WITH_EGL
    AND EGL_FOUND
    AND OpenGL_OpenGL_FOUND
@@ -220,6 +225,18 @@ if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
   endif()
   list(APPEND TEXLINK_INSTALL_TARGETS texlink_vulkan)
   list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_vulkan.h)
+endif()
+
+if(NOT WIN32 AND TEXLINK_WITH_CUDA AND CUDAToolkit_FOUND)
+  add_library(texlink_cuda src/backend_cuda.c)
+  target_link_libraries(texlink_cuda PUBLIC texlink CUDA::cuda_driver)
+  target_include_directories(
+    texlink_cuda PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                        $<INSTALL_INTERFACE:include>
+                        ${CUDAToolkit_INCLUDE_DIRS})
+  target_compile_options(texlink_cuda PRIVATE -Wall -Wextra -Wpedantic)
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_cuda)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_cuda.h)
 endif()
 
 if(TEXLINK_BUILD_EXAMPLES)
@@ -379,6 +396,29 @@ if(TEXLINK_BUILD_EXAMPLES)
                                                   ${GLFW3_CFLAGS_OTHER})
       endif()
     endforeach()
+  endif()
+
+  if(TARGET texlink_cuda AND TARGET texlink_egl)
+    if(GLFW3_FOUND)
+      add_executable(cuda_tex_producer examples/cuda_tex_producer.c)
+      target_link_libraries(cuda_tex_producer PRIVATE texlink_cuda texlink_egl
+                                                      CUDA::cuda_driver
+                                                      CUDA::nvrtc
+                                                      ${GLFW3_LIBRARIES} m)
+      target_include_directories(
+        cuda_tex_producer PRIVATE include ${GLFW3_INCLUDE_DIRS}
+                                  ${CUDAToolkit_INCLUDE_DIRS})
+      target_compile_options(cuda_tex_producer PRIVATE -Wall -Wextra
+                                                       -Wpedantic
+                                                       ${GLFW3_CFLAGS_OTHER})
+    endif()
+
+    add_executable(cuda_tex_consumer examples/cuda_tex_consumer.c)
+    target_link_libraries(cuda_tex_consumer PRIVATE texlink_cuda texlink_egl
+                                                    CUDA::cuda_driver)
+    target_include_directories(
+      cuda_tex_consumer PRIVATE include ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_options(cuda_tex_consumer PRIVATE -Wall -Wextra -Wpedantic)
   endif()
 endif()
 

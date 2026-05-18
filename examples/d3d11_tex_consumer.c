@@ -270,7 +270,7 @@ static void present_texture(ID3D11Device *device, window_target_t *target,
 
 int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
-  const char *name = (argc > 1) ? argv[1] : "d3d_interop";
+  const char *name = (argc > 1) ? argv[1] : "texlink";
 
   if (!glfwInit()) {
     fprintf(stderr, "glfwInit failed\n");
