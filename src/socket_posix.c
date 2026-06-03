@@ -2,6 +2,7 @@
 #include "texlink_internal.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -10,6 +11,10 @@
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 int texlink_send_ipc_handles(texlink_socket_t sock,
                              const texlink_ipc_handle_t *fds, int nfds) {
@@ -74,9 +79,16 @@ int texlink_recv_ipc_handles(texlink_socket_t sock, texlink_ipc_handle_t *fds,
 }
 
 texlink_socket_t texlink_socket_bind(const char *path) {
+#ifdef __APPLE__
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+#else
   int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#endif
   if (fd < 0)
     return -1;
+#ifdef __APPLE__
+  fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
 
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
@@ -94,9 +106,16 @@ texlink_socket_t texlink_socket_bind(const char *path) {
 }
 
 texlink_socket_t texlink_socket_connect(const char *path) {
+#ifdef __APPLE__
+  int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+#else
   int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#endif
   if (fd < 0)
     return -1;
+#ifdef __APPLE__
+  fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
 
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
@@ -119,9 +138,16 @@ texlink_socket_t texlink_socket_connect(const char *path) {
  * issue on SOCK_STREAM where ancillary data can interfere with byte counting.
  */
 int texlink_socket_accept(texlink_socket_t server, texlink_socket_t *out_client) {
+#ifdef __APPLE__
+  int client = accept(server, NULL, NULL);
+  if (client < 0)
+    return -1;
+  fcntl(client, F_SETFD, FD_CLOEXEC);
+#else
   int client = accept4(server, NULL, NULL, SOCK_CLOEXEC);
   if (client < 0)
     return -1;
+#endif
   *out_client = client;
   return 0;
 }

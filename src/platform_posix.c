@@ -75,26 +75,55 @@ int texlink_native_handle_type_is_ipc(texlink_native_handle_type_t type) {
   case TEXLINK_NATIVE_HANDLE_SYNC_FD:
   case TEXLINK_NATIVE_HANDLE_OPAQUE_FD:
     return 1;
+  case TEXLINK_NATIVE_HANDLE_IOSURFACE_ID:
+#ifdef __APPLE__
+    return 1;
+#else
+    return 0;
+#endif
   default:
     return 0;
   }
 }
 
 texlink_native_handle_type_t texlink_default_native_handle_type(void) {
+#ifdef __APPLE__
+  return TEXLINK_NATIVE_HANDLE_IOSURFACE_ID;
+#else
   return TEXLINK_NATIVE_HANDLE_DMA_BUF_FD;
+#endif
 }
 
 void texlink_frame_init_received(texlink_frame_t *frame) {
   frame->dma_fd = -1;
   frame->sync_fd = -1;
+#ifdef __APPLE__
+  frame->map_base = NULL;
+  frame->map_ptr = NULL;
+#else
   frame->map_base = MAP_FAILED;
   frame->map_ptr = MAP_FAILED;
+#endif
   frame->drm_fd = -1;
 }
 
 int texlink_frame_recv_native_handle(texlink_socket_t sock,
                                      texlink_frame_t *frame,
                                      texlink_native_handle_type_t type) {
+#ifdef __APPLE__
+  if (type == TEXLINK_NATIVE_HANDLE_IOSURFACE_ID) {
+    uint64_t surface_id = 0;
+    if (texlink_socket_recv(sock, &surface_id, sizeof(surface_id)) != 0)
+      return -1;
+    frame->handle.handle_type = type;
+    frame->handle.owned = 0;
+    frame->handle.value.ptr = (void *)(uintptr_t)surface_id;
+    frame->meta.handle_type = (uint32_t)type;
+    frame->meta.modifier = surface_id;
+    frame->dma_fd = -1;
+    return 0;
+  }
+#endif
   int fd = -1;
   if (texlink_recv_ipc_handles(sock, &fd, 1) < 0)
     return -1;
@@ -123,6 +152,12 @@ int texlink_frame_send_native_handle(texlink_socket_t sock,
   if (texlink_frame_get_native_handle(frame, type, &handle) != 0 ||
       !texlink_native_handle_type_is_ipc(handle.handle_type))
     return -1;
+#ifdef __APPLE__
+  if (handle.handle_type == TEXLINK_NATIVE_HANDLE_IOSURFACE_ID) {
+    uint64_t surface_id = (uint64_t)(uintptr_t)handle.value.ptr;
+    return texlink_socket_send(sock, &surface_id, sizeof(surface_id));
+  }
+#endif
   return texlink_send_ipc_handles(sock, &handle.value.fd, 1);
 }
 

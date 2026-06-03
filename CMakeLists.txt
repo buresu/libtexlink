@@ -14,6 +14,8 @@ option(TEXLINK_WITH_VULKAN "Build the Vulkan texlink backend utility" OFF)
 option(TEXLINK_WITH_CUDA "Build the CUDA dma-buf import backend utility" OFF)
 option(TEXLINK_WITH_D3D11 "Build the Direct3D 11 texlink backend utility" OFF)
 option(TEXLINK_WITH_D3D12 "Build the Direct3D 12 texlink backend utility" OFF)
+option(TEXLINK_WITH_METAL "Build the macOS Metal texlink backend utility" OFF)
+option(TEXLINK_WITH_CGL "Build the macOS CGL/OpenGL texlink backend utility" OFF)
 
 set(TEXLINK_CORE_SOURCES src/session.c)
 set(TEXLINK_CORE_PRIVATE_INCLUDES src)
@@ -30,6 +32,13 @@ endif()
 if(WIN32)
   list(APPEND TEXLINK_CORE_SOURCES src/frame_win32.c src/socket_win32.c
        src/sync_win32.c src/registry_win32.c src/platform_win32.c)
+elseif(APPLE)
+  list(APPEND TEXLINK_CORE_SOURCES src/socket_posix.c src/sync_darwin.c
+       src/registry_posix.c src/platform_posix.c src/frame_darwin.c)
+  find_library(IOSURFACE_FRAMEWORK IOSurface REQUIRED)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+  list(APPEND TEXLINK_CORE_PUBLIC_LIBS ${IOSURFACE_FRAMEWORK}
+       ${COREFOUNDATION_FRAMEWORK})
 else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GBM REQUIRED gbm)
@@ -74,7 +83,8 @@ set(TEXLINK_INSTALL_HEADERS include/texlink.h)
 
 if(TEXLINK_BUILD_EXAMPLES
    AND (TEXLINK_WITH_EGL OR TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN
-        OR TEXLINK_WITH_D3D11 OR TEXLINK_WITH_D3D12))
+        OR TEXLINK_WITH_D3D11 OR TEXLINK_WITH_D3D12 OR TEXLINK_WITH_METAL
+        OR TEXLINK_WITH_CGL))
   if(WIN32)
     find_package(glfw3 CONFIG QUIET)
     if(glfw3_FOUND)
@@ -110,15 +120,54 @@ if(TEXLINK_BUILD_EXAMPLES
         set(GLFW3_RUNTIME "${GLFW3_RUNTIME}")
       endif()
     endif()
+  elseif(APPLE)
+    find_package(glfw3 CONFIG QUIET)
+    if(glfw3_FOUND)
+      set(GLFW3_FOUND TRUE)
+      set(TEXLINK_GLFW_TARGET glfw)
+      if(NOT TARGET glfw)
+        set(TEXLINK_GLFW_TARGET glfw3)
+      endif()
+    else()
+      set(TEXLINK_GLFW_ROOT "$ENV{GLFW_ROOT}")
+      find_path(GLFW3_INCLUDE_DIR
+                NAMES GLFW/glfw3.h
+                PATHS "${TEXLINK_GLFW_ROOT}" /opt/homebrew /usr/local
+                PATH_SUFFIXES include)
+      find_library(GLFW3_LIBRARY
+                   NAMES glfw glfw3
+                   PATHS "${TEXLINK_GLFW_ROOT}" /opt/homebrew /usr/local
+                   PATH_SUFFIXES lib)
+      if(GLFW3_INCLUDE_DIR AND GLFW3_LIBRARY)
+        set(GLFW3_FOUND TRUE)
+        set(GLFW3_INCLUDE_DIRS "${GLFW3_INCLUDE_DIR}")
+        set(GLFW3_LIBRARIES "${GLFW3_LIBRARY}")
+      endif()
+    endif()
   else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GLFW3 glfw3)
   endif()
   if((TEXLINK_WITH_WGL OR TEXLINK_WITH_VULKAN OR TEXLINK_WITH_D3D11
-      OR TEXLINK_WITH_D3D12)
+      OR TEXLINK_WITH_D3D12 OR TEXLINK_WITH_METAL OR TEXLINK_WITH_CGL)
      AND NOT GLFW3_FOUND)
     message(STATUS "GLFW3 not found; skipping windowed GPU example programs")
   endif()
+endif()
+
+if(APPLE AND TEXLINK_WITH_METAL)
+  enable_language(OBJC)
+  find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+  find_library(METAL_FRAMEWORK Metal REQUIRED)
+  find_library(IOSURFACE_FRAMEWORK IOSurface REQUIRED)
+  find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+  find_library(QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
+endif()
+
+if(APPLE AND TEXLINK_WITH_CGL)
+  find_package(OpenGL REQUIRED)
+  find_library(IOSURFACE_FRAMEWORK IOSurface REQUIRED)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
 endif()
 
 if(NOT WIN32 AND TEXLINK_WITH_EGL)
@@ -205,6 +254,34 @@ if(WIN32 AND TEXLINK_WITH_D3D12)
   list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_d3d12.h)
 endif()
 
+if(APPLE AND TEXLINK_WITH_METAL)
+  add_library(texlink_metal src/backend_metal.m)
+  target_link_libraries(texlink_metal PUBLIC texlink PRIVATE
+                                             ${FOUNDATION_FRAMEWORK}
+                                             ${METAL_FRAMEWORK}
+                                             ${IOSURFACE_FRAMEWORK})
+  target_include_directories(
+    texlink_metal PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                         $<INSTALL_INTERFACE:include>)
+  target_compile_options(texlink_metal PRIVATE -Wall -Wextra -Wpedantic)
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_metal)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_metal.h)
+endif()
+
+if(APPLE AND TEXLINK_WITH_CGL)
+  add_library(texlink_cgl src/backend_cgl.c)
+  target_link_libraries(texlink_cgl PUBLIC texlink OpenGL::GL PRIVATE
+                                          ${IOSURFACE_FRAMEWORK}
+                                          ${COREFOUNDATION_FRAMEWORK})
+  target_include_directories(
+    texlink_cgl PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                      $<INSTALL_INTERFACE:include>)
+  target_compile_definitions(texlink_cgl PRIVATE GL_SILENCE_DEPRECATION)
+  target_compile_options(texlink_cgl PRIVATE -Wall -Wextra -Wpedantic)
+  list(APPEND TEXLINK_INSTALL_TARGETS texlink_cgl)
+  list(APPEND TEXLINK_INSTALL_HEADERS include/texlink_cgl.h)
+endif()
+
 if(TEXLINK_WITH_VULKAN AND Vulkan_FOUND)
   if(WIN32)
     set(TEXLINK_VULKAN_PLATFORM_SRC src/backend_vulkan_win32.c)
@@ -261,6 +338,37 @@ if(TEXLINK_BUILD_EXAMPLES)
       target_compile_options(
         ${example} PRIVATE -Wall -Wextra ${GLFW3_CFLAGS_OTHER}
                            ${EGL_CFLAGS_OTHER})
+    endforeach()
+  endif()
+
+  if(APPLE AND TARGET texlink_cgl AND GLFW3_FOUND)
+    foreach(example cgl_tex_producer cgl_tex_consumer)
+      add_executable(${example} examples/${example}.c)
+      target_link_libraries(${example} PRIVATE texlink_cgl)
+      if(TEXLINK_GLFW_TARGET)
+        target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES})
+      endif()
+      target_include_directories(${example} PRIVATE include ${GLFW3_INCLUDE_DIRS})
+      target_compile_definitions(${example} PRIVATE GL_SILENCE_DEPRECATION)
+      target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
+    endforeach()
+  endif()
+
+  if(APPLE AND TARGET texlink_metal AND GLFW3_FOUND)
+    foreach(example metal_tex_producer metal_tex_consumer)
+      add_executable(${example} examples/${example}.m)
+      target_link_libraries(${example} PRIVATE texlink_metal
+                                               ${COCOA_FRAMEWORK}
+                                               ${QUARTZCORE_FRAMEWORK})
+      if(TEXLINK_GLFW_TARGET)
+        target_link_libraries(${example} PRIVATE ${TEXLINK_GLFW_TARGET})
+      else()
+        target_link_libraries(${example} PRIVATE ${GLFW3_LIBRARIES})
+      endif()
+      target_include_directories(${example} PRIVATE include ${GLFW3_INCLUDE_DIRS})
+      target_compile_options(${example} PRIVATE -Wall -Wextra -Wpedantic)
     endforeach()
   endif()
 

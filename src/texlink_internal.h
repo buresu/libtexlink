@@ -36,6 +36,10 @@ typedef pid_t texlink_pid_t;
 struct gbm_device;
 struct gbm_bo;
 
+#ifdef __APPLE__
+typedef struct __IOSurface *IOSurfaceRef;
+#endif
+
 #define TEXLINK_MAX_BUFS 3
 #ifdef _WIN32
 #define TEXLINK_SHM_PREFIX "Local\\texlink_"
@@ -81,6 +85,10 @@ struct texlink_frame {
   struct gbm_bo *bo;
   struct gbm_device *gbm;
   int drm_fd;
+
+#ifdef __APPLE__
+  IOSurfaceRef iosurface;
+#endif
 };
 
 /* Shared memory layout must be identical in producer and consumer */
